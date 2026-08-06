@@ -1,4 +1,5 @@
 import type { ChatMessage, LLMProviderConfig } from '@/types/chat'
+import { getStoredToken, getCopilotToken } from '@/services/auth/github'
 
 export interface LLMProvider {
   chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string, void, unknown>
@@ -165,15 +166,21 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
 export class CopilotProvider implements LLMProvider {
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
-    if (!config.apiKey) throw new Error('GitHub token required. Please configure in settings.')
+    // Use stored GitHub token from device flow login
+    const githubToken = config.apiKey || getStoredToken()
+    if (!githubToken) throw new Error('Not signed in to GitHub. Please sign in via Settings.')
 
-    // GitHub Copilot uses the models API
+    // Get a Copilot session token
+    const copilotToken = await getCopilotToken(githubToken)
+
     const response = await fetch('https://api.githubcopilot.com/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-        'Editor-Version': 'chatgraph/1.0.0',
+        'Authorization': `Bearer ${copilotToken}`,
+        'Editor-Version': 'vscode/1.95.0',
+        'Editor-Plugin-Version': 'copilot-chat/0.22.0',
+        'Openai-Intent': 'conversation-panel',
       },
       body: JSON.stringify({
         model: config.defaultModel || 'gpt-4o',

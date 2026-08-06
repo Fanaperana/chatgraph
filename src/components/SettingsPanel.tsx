@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { useChatStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { GitHubLogin } from '@/components/GitHubLogin'
 import type { LLMProviderConfig, LLMProviderType } from '@/types/chat'
 
 interface SettingsPanelProps {
@@ -58,6 +59,12 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
                 </button>
               ))}
             </div>
+          </section>
+
+          {/* GitHub Copilot */}
+          <section>
+            <h3 className="text-sm font-medium text-foreground mb-3">GitHub Copilot</h3>
+            <GitHubLogin />
           </section>
 
           {/* Providers */}
