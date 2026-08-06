@@ -3,10 +3,20 @@ import type { Node, Edge } from '@xyflow/react'
 import { Position } from '@xyflow/react'
 import type { LayoutDirection } from '@/types/chat'
 
-const NODE_WIDTH = 320
+const NODE_WIDTH_PROMPT = 300
+const NODE_WIDTH_RESPONSE = 340
+const NODE_WIDTH_INPUT = 380
 const NODE_HEIGHT_PROMPT = 100
 const NODE_HEIGHT_RESPONSE = 140
 const NODE_HEIGHT_INPUT = 80
+
+function getNodeDimensions(type: string | undefined) {
+  switch (type) {
+    case 'inputNode': return { width: NODE_WIDTH_INPUT, height: NODE_HEIGHT_INPUT }
+    case 'responseNode': return { width: NODE_WIDTH_RESPONSE, height: NODE_HEIGHT_RESPONSE }
+    default: return { width: NODE_WIDTH_PROMPT, height: NODE_HEIGHT_PROMPT }
+  }
+}
 
 export function getLayoutedElements(
   nodes: Node[],
@@ -24,17 +34,12 @@ export function getLayoutedElements(
     ranksep: 80,
     marginx: 20,
     marginy: 20,
+    align: 'UL',
   })
 
   nodes.forEach((node) => {
-    const height =
-      node.type === 'inputNode'
-        ? NODE_HEIGHT_INPUT
-        : node.type === 'responseNode'
-          ? NODE_HEIGHT_RESPONSE
-          : NODE_HEIGHT_PROMPT
-
-    g.setNode(node.id, { width: NODE_WIDTH, height })
+    const { width, height } = getNodeDimensions(node.type)
+    g.setNode(node.id, { width, height })
   })
 
   edges.forEach((edge) => {
@@ -45,19 +50,14 @@ export function getLayoutedElements(
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = g.node(node.id)
-    const height =
-      node.type === 'inputNode'
-        ? NODE_HEIGHT_INPUT
-        : node.type === 'responseNode'
-          ? NODE_HEIGHT_RESPONSE
-          : NODE_HEIGHT_PROMPT
+    const { width, height } = getNodeDimensions(node.type)
 
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
+        x: nodeWithPosition.x - width / 2,
         y: nodeWithPosition.y - height / 2,
       },
     }

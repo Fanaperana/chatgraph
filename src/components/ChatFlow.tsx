@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useRef, useEffect, useState } from 'react'
 import {
   ReactFlow,
   Background,
@@ -6,11 +6,15 @@ import {
   MiniMap,
   type Node,
   type Edge,
+  type NodeChange,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   BackgroundVariant,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { AlignCenter } from 'lucide-react'
 
 import { useChatStore } from '@/store'
 import { getLayoutedElements } from '@/utils/layout'
@@ -19,6 +23,7 @@ import { ResponseNode } from '@/components/nodes/ResponseNode'
 import { InputNode } from '@/components/nodes/InputNode'
 import { LayoutToggle } from '@/components/LayoutToggle'
 import { Toolbar } from '@/components/Toolbar'
+import { cn } from '@/lib/utils'
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -26,14 +31,18 @@ const nodeTypes = {
   inputNode: InputNode,
 }
 
-export function ChatFlow() {
+function ChatFlowInner() {
   const { trees, activeTreeId, settings } = useChatStore()
   const tree = activeTreeId ? trees[activeTreeId] : null
+  const { fitView } = useReactFlow()
+
+  // Track whether the user has manually dragged nodes
+  const [isDragged, setIsDragged] = useState(false)
+  const prevTreeRef = useRef<string | null>(null)
 
   // Convert tree to flow nodes and edges
   const { flowNodes, flowEdges } = useMemo(() => {
     if (!tree || !tree.rootNodeId) {
-      // Show only an input node when tree is empty
       const inputNode: Node = {
         id: 'input-root',
         type: 'inputNode',
@@ -46,7 +55,6 @@ export function ChatFlow() {
     const nodes: Node[] = []
     const edges: Edge[] = []
 
-    // Walk the tree and create nodes/edges
     Object.values(tree.nodes).forEach((chatNode) => {
       const isUser = chatNode.role === 'user'
       nodes.push({
@@ -73,7 +81,7 @@ export function ChatFlow() {
       }
     })
 
-    // Add input nodes at every leaf (nodes with no children)
+    // Add input nodes at every leaf
     const leafNodes = Object.values(tree.nodes).filter(
       (n) => n.childrenIds.length === 0 && !n.isStreaming
     )
@@ -98,7 +106,7 @@ export function ChatFlow() {
     return { flowNodes: nodes, flowEdges: edges }
   }, [tree])
 
-  // Apply layout
+  // Compute the symmetrical layout
   const { nodes: layoutedNodes, edges: layoutedEdges } = useMemo(
     () => getLayoutedElements(flowNodes, flowEdges, settings.layoutDirection),
     [flowNodes, flowEdges, settings.layoutDirection]
@@ -107,25 +115,59 @@ export function ChatFlow() {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges)
 
-  // Update when layout changes
-  useMemo(() => {
+  // Serialize tree structure to detect data changes (not position changes)
+  const treeFingerprint = useMemo(() => {
+    if (!tree) return ''
+    return JSON.stringify({
+      nodeCount: Object.keys(tree.nodes).length,
+      nodeIds: Object.keys(tree.nodes).sort(),
+      direction: settings.layoutDirection,
+    })
+  }, [tree, settings.layoutDirection])
+
+  // Auto-apply layout when tree data changes (new nodes, direction change)
+  // but NOT when user has dragged nodes (unless data actually changed)
+  useEffect(() => {
+    if (prevTreeRef.current !== treeFingerprint) {
+      // Data changed → snap to layout automatically
+      setNodes(layoutedNodes)
+      setEdges(layoutedEdges)
+      setIsDragged(false)
+      prevTreeRef.current = treeFingerprint
+      setTimeout(() => fitView({ duration: 200 }), 50)
+    }
+  }, [treeFingerprint, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
+
+  // Intercept node changes: detect user drags
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const hasDrag = changes.some(
+        (c) => c.type === 'position' && c.dragging === true
+      )
+      if (hasDrag) {
+        setIsDragged(true)
+      }
+      onNodesChange(changes)
+    },
+    [onNodesChange]
+  )
+
+  // "Snap to layout" button handler
+  const snapToLayout = useCallback(() => {
     setNodes(layoutedNodes)
     setEdges(layoutedEdges)
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges])
-
-  const onInit = useCallback((instance: { fitView: () => void }) => {
-    setTimeout(() => instance.fitView(), 50)
-  }, [])
+    setIsDragged(false)
+    setTimeout(() => fitView({ duration: 300 }), 20)
+  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
 
   return (
     <div className="w-full h-full relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        onInit={onInit}
         fitView
         minZoom={0.2}
         maxZoom={2}
@@ -147,6 +189,32 @@ export function ChatFlow() {
       {/* Floating controls */}
       <Toolbar />
       <LayoutToggle />
+
+      {/* Snap to layout button — highlighted when nodes are manually moved */}
+      <div className="absolute bottom-4 right-4 z-10">
+        <button
+          onClick={snapToLayout}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 rounded-lg',
+            'bg-card border shadow-lg text-sm transition-all duration-200',
+            isDragged
+              ? 'border-primary text-primary hover:bg-primary/10'
+              : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+          )}
+          title="Snap to symmetrical layout"
+        >
+          <AlignCenter className="w-4 h-4" />
+          <span>Auto-layout</span>
+        </button>
+      </div>
     </div>
+  )
+}
+
+export function ChatFlow() {
+  return (
+    <ReactFlowProvider>
+      <ChatFlowInner />
+    </ReactFlowProvider>
   )
 }
