@@ -14,16 +14,13 @@ import {
   BackgroundVariant,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlignCenter } from 'lucide-react'
 
 import { useChatStore } from '@/store'
 import { getLayoutedElements } from '@/utils/layout'
 import { PromptNode } from '@/components/nodes/PromptNode'
 import { ResponseNode } from '@/components/nodes/ResponseNode'
 import { InputNode } from '@/components/nodes/InputNode'
-import { LayoutToggle } from '@/components/LayoutToggle'
 import { Toolbar } from '@/components/Toolbar'
-import { cn } from '@/lib/utils'
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -187,26 +184,7 @@ function ChatFlowInner() {
       </ReactFlow>
 
       {/* Floating controls */}
-      <Toolbar />
-      <LayoutToggle />
-
-      {/* Snap to layout button — highlighted when nodes are manually moved */}
-      <div className="absolute bottom-4 right-4 z-10">
-        <button
-          onClick={snapToLayout}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'bg-card border shadow-lg text-sm transition-all duration-200',
-            isDragged
-              ? 'border-primary text-primary hover:bg-primary/10'
-              : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
-          )}
-          title="Snap to symmetrical layout"
-        >
-          <AlignCenter className="w-4 h-4" />
-          <span>Auto-layout</span>
-        </button>
-      </div>
+      <Toolbar onSnapToLayout={snapToLayout} isDragged={isDragged} />
     </div>
   )
 }

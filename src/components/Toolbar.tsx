@@ -1,11 +1,17 @@
 import { useState } from 'react'
-import { Plus, Settings2, Download, Upload, FolderTree } from 'lucide-react'
+import { Plus, Settings2, Download, Upload, FolderTree, ArrowDownUp, ArrowRightLeft, AlignCenter } from 'lucide-react'
 import { useChatStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { SettingsPanel } from '@/components/SettingsPanel'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip'
 
-export function Toolbar() {
-  const { trees, activeTreeId, createTree, setActiveTree } = useChatStore()
+interface ToolbarProps {
+  onSnapToLayout?: () => void
+  isDragged?: boolean
+}
+
+export function Toolbar({ onSnapToLayout, isDragged }: ToolbarProps) {
+  const { trees, activeTreeId, createTree, setActiveTree, settings, setLayoutDirection } = useChatStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showTreeList, setShowTreeList] = useState(false)
 
@@ -102,29 +108,82 @@ export function Toolbar() {
       </div>
 
       {/* Right side actions */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-        <button
-          onClick={handleExport}
-          className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-          title="Export"
-        >
-          <Download className="w-4 h-4" />
-        </button>
-        <button
-          onClick={handleImport}
-          className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-          title="Import"
-        >
-          <Upload className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-          title="Settings"
-        >
-          <Settings2 className="w-4 h-4" />
-        </button>
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setLayoutDirection(settings.layoutDirection === 'TB' ? 'LR' : 'TB')}
+                className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+              >
+                {settings.layoutDirection === 'TB' ? (
+                  <ArrowDownUp className="w-4 h-4" />
+                ) : (
+                  <ArrowRightLeft className="w-4 h-4" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {settings.layoutDirection === 'TB' ? 'Switch to Left-Right' : 'Switch to Top-Down'}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onSnapToLayout}
+                className={cn(
+                  'p-2 rounded-lg bg-card border shadow-lg transition-all',
+                  isDragged
+                    ? 'border-primary text-primary hover:bg-primary/10'
+                    : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+                )}
+              >
+                <AlignCenter className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Auto-layout</TooltipContent>
+          </Tooltip>
+
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleExport}
+                className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Export chat</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleImport}
+                className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+              >
+                <Upload className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Import chat</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 rounded-lg bg-card border border-border shadow-lg text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </>
