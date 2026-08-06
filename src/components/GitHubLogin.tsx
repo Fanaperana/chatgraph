@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { LogOut, Loader2, Copy, ExternalLink } from 'lucide-react'
-import { requestDeviceCode, pollForToken, getStoredToken, storeToken, clearToken } from '@/services/auth/github'
+import { LogOut, ExternalLink, Eye, EyeOff } from 'lucide-react'
+import { getStoredToken, storeToken, clearToken } from '@/services/auth/github'
 import { cn } from '@/lib/utils'
 
 function GitHubIcon({ className }: { className?: string }) {
@@ -13,57 +13,28 @@ function GitHubIcon({ className }: { className?: string }) {
 
 export function GitHubLogin() {
   const [token, setToken] = useState<string | null>(getStoredToken())
-  const [deviceCode, setDeviceCode] = useState<{ user_code: string; verification_uri: string } | null>(null)
-  const [status, setStatus] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [inputToken, setInputToken] = useState('')
+  const [showInput, setShowInput] = useState(false)
+  const [showToken, setShowToken] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleLogin = async () => {
-    setIsLoading(true)
-    setStatus('Requesting device code...')
-    try {
-      const codeResponse = await requestDeviceCode()
-      setDeviceCode({
-        user_code: codeResponse.user_code,
-        verification_uri: codeResponse.verification_uri,
-      })
-      setStatus('Enter the code on GitHub')
-
-      // Open GitHub in a new tab
-      window.open(codeResponse.verification_uri, '_blank')
-
-      // Poll for the token
-      const accessToken = await pollForToken(
-        codeResponse.device_code,
-        codeResponse.interval,
-        codeResponse.expires_in,
-        setStatus
-      )
-
-      storeToken(accessToken)
-      setToken(accessToken)
-      setDeviceCode(null)
-      setStatus('Connected!')
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Login failed')
-    } finally {
-      setIsLoading(false)
+  const handleSaveToken = () => {
+    const trimmed = inputToken.trim()
+    if (!trimmed) {
+      setError('Please enter a token')
+      return
     }
+    storeToken(trimmed)
+    setToken(trimmed)
+    setInputToken('')
+    setShowInput(false)
+    setError('')
   }
 
   const handleLogout = () => {
     clearToken()
     setToken(null)
-    setStatus('')
-    setDeviceCode(null)
-  }
-
-  const handleCopyCode = () => {
-    if (deviceCode?.user_code) {
-      navigator.clipboard.writeText(deviceCode.user_code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
+    setError('')
   }
 
   if (token) {
@@ -72,6 +43,9 @@ export function GitHubLogin() {
         <div className="flex items-center gap-2">
           <GitHubIcon className="w-4 h-4 text-foreground" />
           <span className="text-sm text-foreground">Connected to GitHub</span>
+          <span className="text-[10px] font-mono text-muted-foreground">
+            {token.slice(0, 8)}...
+          </span>
         </div>
         <button
           onClick={handleLogout}
@@ -86,59 +60,67 @@ export function GitHubLogin() {
 
   return (
     <div className="space-y-3">
-      {!deviceCode ? (
+      {!showInput ? (
         <button
-          onClick={handleLogin}
-          disabled={isLoading}
+          onClick={() => setShowInput(true)}
           className={cn(
             'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all',
-            'bg-foreground text-background hover:bg-foreground/90',
-            isLoading && 'opacity-60 cursor-not-allowed'
+            'bg-foreground text-background hover:bg-foreground/90'
           )}
         >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <GitHubIcon className="w-4 h-4" />
-          )}
-          Sign in with GitHub
+          <GitHubIcon className="w-4 h-4" />
+          Connect GitHub Copilot
         </button>
       ) : (
         <div className="p-4 rounded-lg border border-border bg-secondary/30 space-y-3">
-          <p className="text-sm text-muted-foreground text-center">
-            Enter this code on GitHub:
+          <p className="text-sm text-muted-foreground">
+            Enter a GitHub Personal Access Token with <code className="px-1 py-0.5 rounded bg-card text-xs font-mono">copilot</code> scope.
           </p>
-          <div className="flex items-center justify-center gap-2">
-            <code className="px-4 py-2 text-lg font-mono font-bold tracking-widest bg-card rounded-md border border-border">
-              {deviceCode.user_code}
-            </code>
-            <button
-              onClick={handleCopyCode}
-              className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors"
-              title="Copy code"
-            >
-              <Copy className="w-4 h-4" />
-            </button>
-          </div>
-          {copied && <p className="text-xs text-center text-primary">Copied!</p>}
+
           <a
-            href={deviceCode.verification_uri}
+            href="https://github.com/settings/tokens/new?scopes=copilot&description=ChatGraph"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-1 text-sm text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
           >
-            Open GitHub <ExternalLink className="w-3 h-3" />
+            Create token on GitHub <ExternalLink className="w-3 h-3" />
           </a>
-          {status && (
-            <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {status}
-            </p>
-          )}
+
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showToken ? 'text' : 'password'}
+                value={inputToken}
+                onChange={(e) => { setInputToken(e.target.value); setError('') }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveToken()}
+                placeholder="ghp_xxxxxxxxxxxx"
+                className="w-full px-3 py-2 pr-9 text-sm rounded-md border border-border bg-background text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <button
+              onClick={handleSaveToken}
+              className="px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Save
+            </button>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <button
+            onClick={() => { setShowInput(false); setError('') }}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
         </div>
-      )}
-      {status && !deviceCode && !isLoading && (
-        <p className="text-xs text-center text-muted-foreground">{status}</p>
       )}
     </div>
   )
