@@ -4,6 +4,7 @@ import { Plus, Send, Brain, Settings2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 import { sendMessage } from '@/services/chat-service'
+import { getStoredToken } from '@/services/auth/github'
 
 export interface InputNodeData {
   parentNodeId: string | null
@@ -97,6 +98,9 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
           {showModelPicker && (
             <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-lg border border-border bg-card shadow-xl p-1 max-h-48 overflow-y-auto">
               {Object.values(providers).map((provider) => {
+                // For copilot, only show models if token is available
+                if (provider.type === 'copilot' && !getStoredToken()) return null
+
                 const models = provider.models.length > 0
                   ? provider.models
                   : provider.type === 'copilot'

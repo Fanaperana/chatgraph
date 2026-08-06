@@ -61,12 +61,6 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
             </div>
           </section>
 
-          {/* GitHub Copilot */}
-          <section>
-            <h3 className="text-sm font-medium text-foreground mb-3">GitHub Copilot</h3>
-            <GitHubLogin />
-          </section>
-
           {/* Providers */}
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -125,6 +119,11 @@ function ProviderCard({ provider, isEditing, onEdit, onUpdate, onDelete }: Provi
 
       {isEditing && (
         <div className="mt-3 space-y-2">
+          {provider.type === 'copilot' && (
+            <div className="mb-3">
+              <GitHubLogin />
+            </div>
+          )}
           <Field label="Name" value={provider.name} onChange={(v) => onUpdate({ name: v })} />
           <div>
             <label className="text-xs text-muted-foreground">Type</label>
