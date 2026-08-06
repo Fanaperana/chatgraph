@@ -1,5 +1,16 @@
 import type { ChatMessage, LLMProviderConfig } from '@/types/chat'
-import { getStoredToken, getCopilotToken } from '@/services/auth/github'
+import { getStoredToken } from '@/services/auth/github'
+
+const isDev = import.meta.env.DEV
+
+// In dev, use Vite proxy to avoid CORS. In prod, requests go direct.
+function getProxiedUrl(endpoint: string, providerType: string): string {
+  if (!isDev) return endpoint
+  if (providerType === 'copilot') return '/api/github-models'
+  if (providerType === 'ollama') return '/api/ollama'
+  if (providerType === 'llamacpp') return '/api/llamacpp'
+  return endpoint
+}
 
 export interface LLMProvider {
   chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string, void, unknown>
@@ -8,7 +19,8 @@ export interface LLMProvider {
 
 export class OllamaProvider implements LLMProvider {
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
-    const response = await fetch(`${config.endpoint}/api/chat`, {
+    const baseUrl = getProxiedUrl(config.endpoint, 'ollama')
+    const response = await fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -50,7 +62,8 @@ export class OllamaProvider implements LLMProvider {
 
   async listModels(config: LLMProviderConfig): Promise<string[]> {
     try {
-      const response = await fetch(`${config.endpoint}/api/tags`)
+      const baseUrl = getProxiedUrl(config.endpoint, 'ollama')
+      const response = await fetch(`${baseUrl}/api/tags`)
       if (!response.ok) return config.models
       const data = await response.json()
       return data.models?.map((m: { name: string }) => m.name) ?? []
@@ -62,8 +75,8 @@ export class OllamaProvider implements LLMProvider {
 
 export class LlamaCppProvider implements LLMProvider {
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
-    // llama.cpp server uses OpenAI-compatible endpoint
-    const response = await fetch(`${config.endpoint}/v1/chat/completions`, {
+    const baseUrl = getProxiedUrl(config.endpoint, 'llamacpp')
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -166,21 +179,16 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
 export class CopilotProvider implements LLMProvider {
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
-    // Use stored GitHub token from device flow login
     const githubToken = config.apiKey || getStoredToken()
-    if (!githubToken) throw new Error('Not signed in to GitHub. Please sign in via Settings.')
+    if (!githubToken) throw new Error('Not signed in to GitHub. Please connect via Settings.')
 
-    // Get a Copilot session token
-    const copilotToken = await getCopilotToken(githubToken)
-
-    const response = await fetch('https://api.githubcopilot.com/chat/completions', {
+    // Use GitHub Models API via proxy in dev
+    const baseUrl = getProxiedUrl('https://models.github.ai/inference', 'copilot')
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${copilotToken}`,
-        'Editor-Version': 'vscode/1.95.0',
-        'Editor-Plugin-Version': 'copilot-chat/0.22.0',
-        'Openai-Intent': 'conversation-panel',
+        'Authorization': `Bearer ${githubToken}`,
       },
       body: JSON.stringify({
         model: config.defaultModel || 'gpt-4o',
@@ -191,7 +199,10 @@ export class CopilotProvider implements LLMProvider {
       }),
     })
 
-    if (!response.ok) throw new Error(`Copilot error: ${response.statusText}`)
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '')
+      throw new Error(`GitHub Models error (${response.status}): ${errBody || response.statusText}`)
+    }
     if (!response.body) throw new Error('No response body')
 
     const reader = response.body.getReader()
@@ -219,7 +230,7 @@ export class CopilotProvider implements LLMProvider {
   }
 
   async listModels(_config: LLMProviderConfig): Promise<string[]> {
-    return ['gpt-4o', 'gpt-4o-mini', 'claude-sonnet-4', 'o3-mini']
+    return ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'Mistral-large', 'Meta-Llama-3.1-405B-Instruct', 'DeepSeek-R1']
   }
 }
 

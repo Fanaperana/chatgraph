@@ -54,6 +54,15 @@ const DEFAULT_SETTINGS: AppSettings = {
 }
 
 const DEFAULT_PROVIDERS: Record<string, LLMProviderConfig> = {
+  copilot: {
+    id: 'copilot',
+    type: 'copilot',
+    name: 'GitHub Copilot',
+    endpoint: 'https://models.github.ai/inference',
+    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'Mistral-large', 'Meta-Llama-3.1-405B-Instruct', 'DeepSeek-R1'],
+    defaultModel: 'gpt-4o',
+    temperature: 0.7,
+  },
   ollama: {
     id: 'ollama',
     type: 'ollama',

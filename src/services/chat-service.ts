@@ -29,6 +29,12 @@ export async function sendMessage(content: string, parentId: string | null): Pro
     return
   }
 
+  // Override defaultModel with the user's active model selection
+  const effectiveConfig = {
+    ...providerConfig,
+    defaultModel: store.settings.activeModel ?? providerConfig.defaultModel,
+  }
+
   // Build context from ancestor chain
   const ancestorChain = store.getAncestorChain(promptNodeId)
   const messages: ChatMessage[] = ancestorChain.map((node) => ({
@@ -51,10 +57,10 @@ export async function sendMessage(content: string, parentId: string | null): Pro
   store.setNodeStreaming(responseNodeId, true)
 
   try {
-    const provider = getProvider(providerConfig.type)
+    const provider = getProvider(effectiveConfig.type)
     let fullContent = ''
 
-    for await (const chunk of provider.chat(messages, providerConfig)) {
+    for await (const chunk of provider.chat(messages, effectiveConfig)) {
       fullContent += chunk
       store.updateNodeContent(responseNodeId, fullContent)
     }
