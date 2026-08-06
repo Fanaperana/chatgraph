@@ -10,11 +10,17 @@ const NODE_HEIGHT_PROMPT = 100
 const NODE_HEIGHT_RESPONSE = 140
 const NODE_HEIGHT_INPUT = 80
 
-function getNodeDimensions(type: string | undefined) {
-  switch (type) {
-    case 'inputNode': return { width: NODE_WIDTH_INPUT, height: NODE_HEIGHT_INPUT }
-    case 'responseNode': return { width: NODE_WIDTH_RESPONSE, height: NODE_HEIGHT_RESPONSE }
-    default: return { width: NODE_WIDTH_PROMPT, height: NODE_HEIGHT_PROMPT }
+function getNodeDimensions(node: Node) {
+  switch (node.type) {
+    case 'inputNode':
+      return { width: NODE_WIDTH_INPUT, height: NODE_HEIGHT_INPUT }
+    case 'responseNode': {
+      // Response nodes grow with their markdown content (capped, then scrolls).
+      const est = typeof node.data?.estHeight === 'number' ? node.data.estHeight : NODE_HEIGHT_RESPONSE
+      return { width: NODE_WIDTH_RESPONSE, height: Math.min(Math.max(est, NODE_HEIGHT_RESPONSE), 420) }
+    }
+    default:
+      return { width: NODE_WIDTH_PROMPT, height: NODE_HEIGHT_PROMPT }
   }
 }
 
@@ -38,7 +44,7 @@ export function getLayoutedElements(
   })
 
   nodes.forEach((node) => {
-    const { width, height } = getNodeDimensions(node.type)
+    const { width, height } = getNodeDimensions(node)
     g.setNode(node.id, { width, height })
   })
 
@@ -50,7 +56,7 @@ export function getLayoutedElements(
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = g.node(node.id)
-    const { width, height } = getNodeDimensions(node.type)
+    const { width, height } = getNodeDimensions(node)
 
     return {
       ...node,

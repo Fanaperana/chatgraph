@@ -1,8 +1,9 @@
-import { memo } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Bot, GitFork, RefreshCw, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
+import { Markdown } from '@/components/ui/Markdown'
 
 export interface ResponseNodeData {
   content: string
@@ -20,11 +21,19 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
   const model = nodeData.model
   const isStreaming = nodeData.isStreaming
 
+  // Keep the response scrolled to the newest tokens while streaming.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (isStreaming && bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }
+  }, [content, isStreaming])
+
   return (
     <div className={cn(
       'group relative w-[340px] rounded-xl border border-border bg-card p-3 shadow-sm',
       'hover:border-muted-foreground/30 hover:shadow-md transition-all duration-200',
-      isStreaming && 'border-primary/30 animate-pulse'
+      isStreaming && 'border-primary/40 shadow-[0_0_0_1px_var(--color-primary)]'
     )}>
       <Handle
         type="target"
@@ -49,11 +58,19 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
               </span>
             )}
           </div>
-          <div className="text-sm text-foreground leading-relaxed line-clamp-6 whitespace-pre-wrap">
-            {content || (
-              isStreaming
-                ? <span className="text-muted-foreground">Generating...</span>
-                : <span className="text-muted-foreground italic">Empty response</span>
+          <div
+            ref={bodyRef}
+            className="chatgraph-scroll max-h-[360px] overflow-y-auto pr-1 nowheel"
+          >
+            {content ? (
+              <Markdown content={content} />
+            ) : isStreaming ? (
+              <span className="text-sm text-muted-foreground">Generating…</span>
+            ) : (
+              <span className="text-sm text-muted-foreground italic">Empty response</span>
+            )}
+            {isStreaming && content && (
+              <span className="ml-0.5 inline-block h-3.5 w-[2px] -mb-0.5 animate-pulse bg-primary align-middle" />
             )}
           </div>
         </div>

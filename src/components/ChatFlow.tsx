@@ -28,6 +28,16 @@ const nodeTypes = {
   inputNode: InputNode,
 }
 
+// Rough estimate of a response node's rendered height so Dagre can reserve
+// vertical space (the body is capped/scrolls beyond ~420px).
+function estimateResponseHeight(content: string): number {
+  if (!content) return 140
+  const lines = content.split('\n')
+  let rows = 0
+  for (const line of lines) rows += Math.max(1, Math.ceil(line.length / 44))
+  return 72 + rows * 21
+}
+
 function ChatFlowInner() {
   const { trees, activeTreeId, settings } = useChatStore()
   const tree = activeTreeId ? trees[activeTreeId] : null
@@ -36,6 +46,9 @@ function ChatFlowInner() {
   // Track whether the user has manually dragged nodes
   const [isDragged, setIsDragged] = useState(false)
   const prevStructureRef = useRef<string | null>(null)
+  // The node the viewport is currently following (streaming or just-finished).
+  const focusRef = useRef<string | null>(null)
+  const lastFollowRef = useRef(0)
 
   // Convert tree to flow nodes and edges
   const { flowNodes, flowEdges } = useMemo(() => {
@@ -63,6 +76,7 @@ function ChatFlowInner() {
           nodeId: chatNode.id,
           model: chatNode.model,
           isStreaming: chatNode.isStreaming,
+          estHeight: isUser ? undefined : estimateResponseHeight(chatNode.content),
         },
       })
 
@@ -134,17 +148,65 @@ function ChatFlowInner() {
     [flowNodes]
   )
 
+  // Id of the node currently streaming a response (if any).
+  const streamingNodeId = useMemo(() => {
+    if (!tree) return null
+    const streaming = Object.values(tree.nodes).find((n) => n.isStreaming)
+    return streaming ? streaming.id : null
+  }, [tree])
+
+  // Smoothly center the viewport on a single node.
+  const centerNode = useCallback(
+    (id: string, duration = 500) => {
+      setTimeout(() => {
+        fitView({ nodes: [{ id }], duration, maxZoom: 1.15, minZoom: 0.4, padding: 0.25 })
+      }, 60)
+    },
+    [fitView]
+  )
+
   // Re-apply layout only when the structure changes (nodes added/removed or
   // direction change) — not on every token — so positions/drags are preserved.
+  // While a response is in focus (streaming or just finished) we skip the
+  // whole-graph fit so the auto-follow keeps the response centered.
   useEffect(() => {
     if (prevStructureRef.current !== structureFingerprint) {
       setNodes(layoutedNodes)
       setEdges(layoutedEdges)
       setIsDragged(false)
       prevStructureRef.current = structureFingerprint
-      setTimeout(() => fitView({ duration: 200 }), 50)
+      if (!focusRef.current) {
+        setTimeout(() => fitView({ duration: 200 }), 50)
+      }
     }
   }, [structureFingerprint, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
+
+  // Auto-center the response node as it generates, and re-center once when it
+  // finishes (instead of zooming back out to the whole graph).
+  useEffect(() => {
+    if (streamingNodeId) {
+      focusRef.current = streamingNodeId
+      centerNode(streamingNodeId)
+    } else if (focusRef.current) {
+      const finished = focusRef.current
+      centerNode(finished)
+      const t = setTimeout(() => {
+        focusRef.current = null
+      }, 900)
+      return () => clearTimeout(t)
+    }
+  }, [streamingNodeId, centerNode])
+
+  // Follow the streaming node as its content grows (throttled).
+  useEffect(() => {
+    if (!streamingNodeId) return
+    const now = Date.now()
+    if (now - lastFollowRef.current > 700) {
+      lastFollowRef.current = now
+      centerNode(streamingNodeId, 350)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataFingerprint])
 
   // Sync live data (streamed content, streaming flag, model) into existing
   // nodes without touching their positions, and keep edge animation in sync.

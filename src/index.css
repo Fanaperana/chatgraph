@@ -63,3 +63,185 @@
   border: none !important;
   box-shadow: none !important;
 }
+
+/* ==========================================================================
+   Markdown preview (Obsidian-like) rendering for assistant responses
+   ========================================================================== */
+.markdown-body {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--color-foreground);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > *:first-child { margin-top: 0 !important; }
+.markdown-body > *:last-child { margin-bottom: 0 !important; }
+
+.markdown-body p { margin: 0.5em 0; }
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--color-foreground);
+}
+.markdown-body h1 { font-size: 1.35em; letter-spacing: -0.01em; }
+.markdown-body h2 {
+  font-size: 1.2em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--color-border);
+}
+.markdown-body h3 { font-size: 1.08em; }
+.markdown-body h4 { font-size: 1em; }
+.markdown-body h5,
+.markdown-body h6 { font-size: 0.92em; color: var(--color-muted-foreground); }
+
+.markdown-body a {
+  color: var(--color-primary);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in oklch, var(--color-primary) 40%, transparent);
+}
+.markdown-body a:hover { border-bottom-color: var(--color-primary); }
+
+.markdown-body strong { font-weight: 650; color: var(--color-foreground); }
+.markdown-body em { font-style: italic; }
+.markdown-body del { opacity: 0.6; }
+
+.markdown-body ul,
+.markdown-body ol { margin: 0.5em 0; padding-left: 1.35em; }
+.markdown-body li { margin: 0.2em 0; }
+.markdown-body li::marker { color: var(--color-muted-foreground); }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--color-primary);
+}
+
+.markdown-body blockquote {
+  margin: 0.6em 0;
+  padding: 0.15em 0.9em;
+  border-left: 3px solid var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 8%, transparent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--color-muted-foreground);
+}
+.markdown-body blockquote p { margin: 0.3em 0; }
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+
+/* Inline code */
+.markdown-body :not(pre) > code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  padding: 0.12em 0.38em;
+  border-radius: var(--radius-sm);
+  background: var(--color-muted);
+  border: 1px solid var(--color-border);
+  color: color-mix(in oklch, var(--color-primary) 70%, var(--color-foreground));
+}
+
+/* Fenced code blocks */
+.markdown-body pre {
+  margin: 0.7em 0;
+  padding: 0.85em 1em;
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--color-background) 55%, var(--color-secondary));
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  line-height: 1.55;
+}
+.markdown-body pre code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-foreground);
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.7em 0;
+  width: 100%;
+  font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--color-border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--color-muted);
+  font-weight: 600;
+}
+.markdown-body tr:nth-child(2n) td {
+  background: color-mix(in oklch, var(--color-muted) 40%, transparent);
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+}
+
+/* Custom scrollbar for scrollable response bodies */
+.chatgraph-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.chatgraph-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-muted-foreground) 35%, transparent);
+  border-radius: 999px;
+}
+.chatgraph-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--color-muted-foreground) 55%, transparent);
+}
+.chatgraph-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ==========================================================================
+   highlight.js token theme (matches app oklch palette)
+   ========================================================================== */
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote { color: var(--color-muted-foreground); font-style: italic; }
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-name,
+.markdown-body .hljs-tag { color: oklch(0.68 0.16 25); }
+.markdown-body .hljs-string,
+.markdown-body .hljs-title,
+.markdown-body .hljs-section,
+.markdown-body .hljs-attribute,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-template-variable,
+.markdown-body .hljs-type,
+.markdown-body .hljs-addition { color: oklch(0.72 0.17 145); }
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet,
+.markdown-body .hljs-link,
+.markdown-body .hljs-meta,
+.markdown-body .hljs-selector-id,
+.markdown-body .hljs-title.class_,
+.markdown-body .hljs-deletion { color: oklch(0.75 0.15 60); }
+.markdown-body .hljs-function .hljs-title,
+.markdown-body .hljs-title.function_,
+.markdown-body .hljs-attr { color: oklch(0.7 0.15 260); }
+.markdown-body .hljs-variable,
+.markdown-body .hljs-params,
+.markdown-body .hljs-property { color: var(--color-foreground); }
+.markdown-body .hljs-emphasis { font-style: italic; }
+.markdown-body .hljs-strong { font-weight: 600; }
+
