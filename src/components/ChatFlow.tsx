@@ -35,7 +35,7 @@ function ChatFlowInner() {
 
   // Track whether the user has manually dragged nodes
   const [isDragged, setIsDragged] = useState(false)
-  const prevTreeRef = useRef<string | null>(null)
+  const prevStructureRef = useRef<string | null>(null)
 
   // Convert tree to flow nodes and edges
   const { flowNodes, flowEdges } = useMemo(() => {
@@ -112,28 +112,59 @@ function ChatFlowInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges)
 
-  // Serialize tree structure to detect data changes (not position changes)
-  const treeFingerprint = useMemo(() => {
-    if (!tree) return ''
-    return JSON.stringify({
-      nodeCount: Object.keys(tree.nodes).length,
-      nodeIds: Object.keys(tree.nodes).sort(),
-      direction: settings.layoutDirection,
-    })
-  }, [tree, settings.layoutDirection])
+  // Structural fingerprint: which nodes/edges exist (ids) + direction.
+  // Includes synthetic input nodes, so it changes when a response finishes
+  // streaming (a new input node appears at the leaf).
+  const structureFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        nodeIds: flowNodes.map((n) => n.id).sort(),
+        direction: settings.layoutDirection,
+      }),
+    [flowNodes, settings.layoutDirection]
+  )
 
-  // Auto-apply layout when tree data changes (new nodes, direction change)
-  // but NOT when user has dragged nodes (unless data actually changed)
+  // Data fingerprint: content / streaming / model of each node. Changes on
+  // every streamed token so the rendered nodes stay in sync live.
+  const dataFingerprint = useMemo(
+    () =>
+      JSON.stringify(
+        flowNodes.map((n) => [n.id, n.data?.content, n.data?.isStreaming, n.data?.model])
+      ),
+    [flowNodes]
+  )
+
+  // Re-apply layout only when the structure changes (nodes added/removed or
+  // direction change) — not on every token — so positions/drags are preserved.
   useEffect(() => {
-    if (prevTreeRef.current !== treeFingerprint) {
-      // Data changed → snap to layout automatically
+    if (prevStructureRef.current !== structureFingerprint) {
       setNodes(layoutedNodes)
       setEdges(layoutedEdges)
       setIsDragged(false)
-      prevTreeRef.current = treeFingerprint
+      prevStructureRef.current = structureFingerprint
       setTimeout(() => fitView({ duration: 200 }), 50)
     }
-  }, [treeFingerprint, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
+  }, [structureFingerprint, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
+
+  // Sync live data (streamed content, streaming flag, model) into existing
+  // nodes without touching their positions, and keep edge animation in sync.
+  useEffect(() => {
+    const dataById = new Map(flowNodes.map((n) => [n.id, n.data]))
+    setNodes((prev) =>
+      prev.map((n) => {
+        const data = dataById.get(n.id)
+        return data ? { ...n, data } : n
+      })
+    )
+    const edgeById = new Map(flowEdges.map((e) => [e.id, e]))
+    setEdges((prev) =>
+      prev.map((e) => {
+        const next = edgeById.get(e.id)
+        return next ? { ...e, animated: next.animated } : e
+      })
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataFingerprint])
 
   // Intercept node changes: detect user drags
   const handleNodesChange = useCallback(

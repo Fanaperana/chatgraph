@@ -6,7 +6,6 @@ const isDev = import.meta.env.DEV
 // In dev, use Vite proxy to avoid CORS. In prod, requests go direct.
 function getProxiedUrl(endpoint: string, providerType: string): string {
   if (!isDev) return endpoint
-  if (providerType === 'copilot') return '/api/github-models'
   if (providerType === 'ollama') return '/api/ollama'
   if (providerType === 'llamacpp') return '/api/llamacpp'
   return endpoint

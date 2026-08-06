@@ -31,11 +31,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/copilot/, ''),
       },
-      '/api/github-models': {
-        target: 'https://models.github.ai',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/github-models/, '/inference'),
-      },
       '/api/ollama': {
         target: 'http://localhost:11434',
         changeOrigin: true,
