@@ -64,11 +64,11 @@ export class OllamaProvider implements LLMProvider {
     try {
       const baseUrl = getProxiedUrl(config.endpoint, 'ollama')
       const response = await fetch(`${baseUrl}/api/tags`)
-      if (!response.ok) return config.models
+      if (!response.ok) return []
       const data = await response.json()
       return data.models?.map((m: { name: string }) => m.name) ?? []
     } catch {
-      return config.models
+      return []
     }
   }
 }
@@ -114,8 +114,16 @@ export class LlamaCppProvider implements LLMProvider {
     }
   }
 
-  async listModels(config: LLMProviderConfig): Promise<string[]> {
-    return config.models
+  async listModels(_config: LLMProviderConfig): Promise<string[]> {
+    try {
+      const baseUrl = getProxiedUrl(_config.endpoint, 'llamacpp')
+      const response = await fetch(`${baseUrl}/v1/models`)
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.data?.map((m: { id: string }) => m.id) ?? []
+    } catch {
+      return []
+    }
   }
 }
 
@@ -168,28 +176,79 @@ export class OpenAICompatibleProvider implements LLMProvider {
       const headers: Record<string, string> = {}
       if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
       const response = await fetch(`${config.endpoint}/v1/models`, { headers })
-      if (!response.ok) return config.models
+      if (!response.ok) return []
       const data = await response.json()
-      return data.data?.map((m: { id: string }) => m.id) ?? config.models
+      return data.data?.map((m: { id: string }) => m.id) ?? []
     } catch {
-      return config.models
+      return []
     }
   }
 }
 
 export class CopilotProvider implements LLMProvider {
+  // Cache the short-lived Copilot token exchanged from the GitHub token.
+  private static copilotToken: string | null = null
+  private static copilotTokenExpiry = 0
+
+  private static get tokenExchangeUrl(): string {
+    return isDev ? '/api/copilot-token' : 'https://api.github.com/copilot_internal/v2/token'
+  }
+
+  private static get apiBaseUrl(): string {
+    return isDev ? '/api/copilot' : 'https://api.githubcopilot.com'
+  }
+
+  private static copilotHeaders(token: string): Record<string, string> {
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Editor-Version': 'vscode/1.99.0',
+      'Editor-Plugin-Version': 'copilot-chat/0.26.0',
+      'Copilot-Integration-Id': 'vscode-chat',
+      'Openai-Intent': 'conversation-panel',
+    }
+  }
+
+  private static async getCopilotToken(githubToken: string): Promise<string> {
+    const now = Date.now()
+    if (CopilotProvider.copilotToken && now < CopilotProvider.copilotTokenExpiry - 60_000) {
+      return CopilotProvider.copilotToken
+    }
+
+    const response = await fetch(CopilotProvider.tokenExchangeUrl, {
+      headers: {
+        'Authorization': `token ${githubToken}`,
+        'Accept': 'application/json',
+        'Editor-Version': 'vscode/1.99.0',
+        'Editor-Plugin-Version': 'copilot-chat/0.26.0',
+      },
+    })
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      throw new Error(
+        `Failed to get Copilot token (${response.status}). ` +
+        `Ensure your GitHub account has an active Copilot subscription. ${body}`
+      )
+    }
+
+    const data = await response.json()
+    if (!data.token) throw new Error('Copilot token response missing token')
+    CopilotProvider.copilotToken = data.token
+    // expires_at is a unix timestamp in seconds
+    CopilotProvider.copilotTokenExpiry = (data.expires_at ? data.expires_at * 1000 : now + 25 * 60_000)
+    return data.token
+  }
+
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
     const githubToken = config.apiKey || getStoredToken()
     if (!githubToken) throw new Error('Not signed in to GitHub. Please connect via Settings.')
 
-    // Use GitHub Models API via proxy in dev
-    const baseUrl = getProxiedUrl('https://models.github.ai/inference', 'copilot')
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const copilotToken = await CopilotProvider.getCopilotToken(githubToken)
+
+    const response = await fetch(`${CopilotProvider.apiBaseUrl}/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${githubToken}`,
-      },
+      headers: CopilotProvider.copilotHeaders(copilotToken),
       body: JSON.stringify({
         model: config.defaultModel || 'gpt-4o',
         messages,
@@ -201,7 +260,7 @@ export class CopilotProvider implements LLMProvider {
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => '')
-      throw new Error(`GitHub Models error (${response.status}): ${errBody || response.statusText}`)
+      throw new Error(`Copilot API error (${response.status}): ${errBody || response.statusText}`)
     }
     if (!response.body) throw new Error('No response body')
 
@@ -229,8 +288,27 @@ export class CopilotProvider implements LLMProvider {
     }
   }
 
-  async listModels(_config: LLMProviderConfig): Promise<string[]> {
-    return ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'Mistral-large', 'Meta-Llama-3.1-405B-Instruct', 'DeepSeek-R1']
+  async listModels(config: LLMProviderConfig): Promise<string[]> {
+    const githubToken = config.apiKey || getStoredToken()
+    if (!githubToken) return config.models
+
+    try {
+      const copilotToken = await CopilotProvider.getCopilotToken(githubToken)
+      const response = await fetch(`${CopilotProvider.apiBaseUrl}/models`, {
+        headers: CopilotProvider.copilotHeaders(copilotToken),
+      })
+      if (!response.ok) return config.models
+      const data = await response.json()
+      // Copilot API returns { data: [{ id: "model-name" }, ...] }
+      if (Array.isArray(data.data)) {
+        // Deduplicate model ids
+        const ids = data.data.map((m: { id: string }) => m.id).filter(Boolean)
+        return Array.from(new Set(ids))
+      }
+      return config.models
+    } catch {
+      return config.models
+    }
   }
 }
 

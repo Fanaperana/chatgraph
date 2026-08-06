@@ -59,7 +59,7 @@ const DEFAULT_PROVIDERS: Record<string, LLMProviderConfig> = {
     type: 'copilot',
     name: 'GitHub Copilot',
     endpoint: 'https://models.github.ai/inference',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'Mistral-large', 'Meta-Llama-3.1-405B-Instruct', 'DeepSeek-R1'],
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini', 'o4-mini', 'claude-sonnet-4', 'claude-3.5-sonnet'],
     defaultModel: 'gpt-4o',
     temperature: 0.7,
   },

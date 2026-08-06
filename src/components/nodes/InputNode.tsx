@@ -1,10 +1,11 @@
-import { memo, useState, useCallback } from 'react'
+import { memo, useState, useCallback, useEffect } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Plus, Send, Brain, Settings2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 import { sendMessage } from '@/services/chat-service'
 import { getStoredToken } from '@/services/auth/github'
+import { getProvider } from '@/services/llm/providers'
 
 export interface InputNodeData {
   parentNodeId: string | null
@@ -16,7 +17,23 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [showModePicker, setShowModePicker] = useState(false)
+  const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({})
   const { settings, providers, setActiveProvider, setActiveModel, setChatMode } = useChatStore()
+
+  // Fetch models from providers when picker opens
+  useEffect(() => {
+    if (!showModelPicker) return
+    Object.values(providers).forEach(async (provider) => {
+      if (provider.type === 'copilot' && !getStoredToken()) return
+      try {
+        const providerInstance = getProvider(provider.type)
+        const models = await providerInstance.listModels(provider)
+        setFetchedModels((prev) => ({ ...prev, [provider.id]: models }))
+      } catch {
+        // Keep existing models on error
+      }
+    })
+  }, [showModelPicker, providers])
   const nodeData = data as unknown as InputNodeData
   const parentNodeId = nodeData.parentNodeId
 
@@ -101,13 +118,7 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
                 // For copilot, only show models if token is available
                 if (provider.type === 'copilot' && !getStoredToken()) return null
 
-                const models = provider.models.length > 0
-                  ? provider.models
-                  : provider.type === 'copilot'
-                    ? ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'DeepSeek-R1']
-                    : provider.defaultModel
-                      ? [provider.defaultModel]
-                      : []
+                const models = fetchedModels[provider.id] ?? provider.models
                 if (models.length === 0) return null
                 return (
                   <div key={provider.id}>

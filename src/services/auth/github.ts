@@ -3,6 +3,14 @@
 
 const GITHUB_CLIENT_ID = 'Iv1.b507a08c87ecfe98' // GitHub CLI's public client ID (copilot-capable)
 
+const isDev = import.meta.env.DEV
+
+// In dev, route through the Vite proxy to bypass CORS on github.com / api.github.com.
+const GITHUB_LOGIN_BASE = isDev ? '/api/github-login' : 'https://github.com'
+const COPILOT_TOKEN_URL = isDev
+  ? '/api/copilot-token'
+  : 'https://api.github.com/copilot_internal/v2/token'
+
 export interface DeviceCodeResponse {
   device_code: string
   user_code: string
@@ -18,7 +26,7 @@ export interface TokenResponse {
 }
 
 export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
-  const response = await fetch('https://github.com/login/device/code', {
+  const response = await fetch(`${GITHUB_LOGIN_BASE}/login/device/code`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -26,7 +34,7 @@ export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
     },
     body: JSON.stringify({
       client_id: GITHUB_CLIENT_ID,
-      scope: 'copilot',
+      scope: 'read:user',
     }),
   })
 
@@ -49,7 +57,7 @@ export async function pollForToken(
   while (Date.now() < expiresAt) {
     await new Promise((resolve) => setTimeout(resolve, interval * 1000))
 
-    const response = await fetch('https://github.com/login/oauth/access_token', {
+    const response = await fetch(`${GITHUB_LOGIN_BASE}/login/oauth/access_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -101,7 +109,7 @@ export async function pollForToken(
 
 // Get a Copilot token using the GitHub user token
 export async function getCopilotToken(githubToken: string): Promise<string> {
-  const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
+  const response = await fetch(COPILOT_TOKEN_URL, {
     headers: {
       'Authorization': `token ${githubToken}`,
       'Accept': 'application/json',

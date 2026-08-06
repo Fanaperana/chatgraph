@@ -13,6 +13,24 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // GitHub OAuth device flow (login/device/code + login/oauth/access_token)
+      '/api/github-login': {
+        target: 'https://github.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/github-login/, ''),
+      },
+      // Exchange a GitHub token for a short-lived Copilot token
+      '/api/copilot-token': {
+        target: 'https://api.github.com',
+        changeOrigin: true,
+        rewrite: () => '/copilot_internal/v2/token',
+      },
+      // Real GitHub Copilot chat/completions + models API (used by VS Code)
+      '/api/copilot': {
+        target: 'https://api.githubcopilot.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/copilot/, ''),
+      },
       '/api/github-models': {
         target: 'https://models.github.ai',
         changeOrigin: true,
