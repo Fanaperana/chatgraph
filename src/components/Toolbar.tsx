@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Settings2, Download, Upload, FolderTree, ArrowDownUp, ArrowRightLeft, AlignCenter } from 'lucide-react'
+import { Plus, Settings2, Download, Upload, FolderTree, ArrowDownUp, ArrowRightLeft, AlignCenter, Trash2 } from 'lucide-react'
 import { useChatStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { SettingsPanel } from '@/components/SettingsPanel'
@@ -11,7 +11,7 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ onSnapToLayout, isDragged }: ToolbarProps) {
-  const { trees, activeTreeId, createTree, setActiveTree, settings, setLayoutDirection } = useChatStore()
+  const { trees, activeTreeId, createTree, setActiveTree, deleteTree, settings, setLayoutDirection } = useChatStore()
   const [showSettings, setShowSettings] = useState(false)
   const [showTreeList, setShowTreeList] = useState(false)
 
@@ -80,16 +80,31 @@ export function Toolbar({ onSnapToLayout, isDragged }: ToolbarProps) {
           {showTreeList && (
             <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-border bg-card shadow-xl p-1 max-h-64 overflow-y-auto">
               {Object.values(trees).map((tree) => (
-                <button
+                <div
                   key={tree.id}
-                  onClick={() => { setActiveTree(tree.id); setShowTreeList(false) }}
                   className={cn(
-                    'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
+                    'flex items-center gap-1 rounded-md text-sm transition-colors',
                     tree.id === activeTreeId ? 'bg-primary/10 text-primary' : 'hover:bg-accent'
                   )}
                 >
-                  {tree.name}
-                </button>
+                  <button
+                    onClick={() => { setActiveTree(tree.id); setShowTreeList(false) }}
+                    className="flex-1 text-left px-3 py-2 truncate"
+                  >
+                    {tree.name}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`Delete "${tree.name}"?`)) {
+                        deleteTree(tree.id)
+                      }
+                    }}
+                    className="p-1.5 mr-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
               {Object.keys(trees).length === 0 && (
                 <p className="px-3 py-2 text-sm text-muted-foreground">No chats yet</p>
