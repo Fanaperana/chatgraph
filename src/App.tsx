@@ -1,9 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { ChatFlow } from '@/components/ChatFlow'
 import { useChatStore } from '@/store'
 
+const ArtifactPanel = lazy(() =>
+  import('@/components/artifacts/ArtifactPanel').then((m) => ({ default: m.ArtifactPanel }))
+)
+
 export default function App() {
   const { trees, activeTreeId, createTree, settings } = useChatStore()
+  const openArtifactId = useChatStore((s) => s.openArtifactId)
 
   // Auto-create a tree if none exists
   useEffect(() => {
@@ -30,8 +35,13 @@ export default function App() {
   }, [settings.theme])
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-background">
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
       <ChatFlow />
+      {openArtifactId && (
+        <Suspense fallback={null}>
+          <ArtifactPanel />
+        </Suspense>
+      )}
     </div>
   )
 }

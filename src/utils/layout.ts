@@ -15,9 +15,10 @@ function getNodeDimensions(node: Node) {
     case 'inputNode':
       return { width: NODE_WIDTH_INPUT, height: NODE_HEIGHT_INPUT }
     case 'responseNode': {
-      // Response nodes grow with their markdown content (capped, then scrolls).
+      // Response nodes grow with their markdown content. Scrollable nodes pass
+      // a fixed estHeight; expanded nodes grow up to a generous ceiling.
       const est = typeof node.data?.estHeight === 'number' ? node.data.estHeight : NODE_HEIGHT_RESPONSE
-      return { width: NODE_WIDTH_RESPONSE, height: Math.min(Math.max(est, NODE_HEIGHT_RESPONSE), 420) }
+      return { width: NODE_WIDTH_RESPONSE, height: Math.min(Math.max(est, NODE_HEIGHT_RESPONSE), 2400) }
     }
     default:
       return { width: NODE_WIDTH_PROMPT, height: NODE_HEIGHT_PROMPT }

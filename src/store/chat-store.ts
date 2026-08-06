@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChatNode, ChatTree, LLMProviderConfig, AppSettings, LayoutDirection, ChatMode } from '@/types/chat'
+import type { ChatNode, ChatTree, LLMProviderConfig, AppSettings, LayoutDirection, ChatMode, Artifact } from '@/types/chat'
+import { parseCodeBlocks, detectKind, makeArtifactTitle } from '@/utils/artifacts'
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -11,6 +12,8 @@ interface ChatState {
   activeTreeId: string | null
   providers: Record<string, LLMProviderConfig>
   settings: AppSettings
+  artifacts: Record<string, Artifact>
+  openArtifactId: string | null
 
   // Tree actions
   createTree: (name?: string) => string
@@ -21,12 +24,20 @@ interface ChatState {
   addNode: (role: ChatNode['role'], content: string, parentId: string | null) => string
   updateNodeContent: (nodeId: string, content: string) => void
   setNodeStreaming: (nodeId: string, streaming: boolean) => void
+  toggleNodeScrollable: (nodeId: string) => void
   forkFromNode: (nodeId: string) => string
   duplicateWithEdit: (nodeId: string, newContent: string) => string
   deleteSubtree: (nodeId: string) => void
 
   // Get ancestor chain for context building
   getAncestorChain: (nodeId: string) => ChatNode[]
+
+  // Artifact actions
+  ensureArtifacts: (nodeId: string) => void
+  setOpenArtifact: (artifactId: string | null) => void
+  addArtifactVersion: (artifactId: string, code: string, note: string) => void
+  setArtifactVersion: (artifactId: string, version: number) => void
+  deleteArtifact: (artifactId: string) => void
 
   // Provider actions
   addProvider: (provider: LLMProviderConfig) => void
@@ -90,7 +101,8 @@ export const useChatStore = create<ChatState>()(
       activeTreeId: null,
       providers: DEFAULT_PROVIDERS,
       settings: DEFAULT_SETTINGS,
-
+      artifacts: {},
+      openArtifactId: null,
       createTree: (name?: string) => {
         const id = generateId()
         const tree: ChatTree = {
@@ -214,6 +226,33 @@ export const useChatStore = create<ChatState>()(
         })
       },
 
+      toggleNodeScrollable: (nodeId) => {
+        const treeId = get().activeTreeId
+        if (!treeId) return
+
+        set((state) => {
+          const tree = state.trees[treeId]
+          if (!tree || !tree.nodes[nodeId]) return state
+
+          return {
+            trees: {
+              ...state.trees,
+              [treeId]: {
+                ...tree,
+                nodes: {
+                  ...tree.nodes,
+                  [nodeId]: {
+                    ...tree.nodes[nodeId],
+                    scrollable: !tree.nodes[nodeId].scrollable,
+                  },
+                },
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        })
+      },
+
       forkFromNode: (nodeId) => {
         // Creates an empty user node as sibling (same parent as nodeId)
         const state = get()
@@ -315,6 +354,125 @@ export const useChatStore = create<ChatState>()(
         return chain
       },
 
+      ensureArtifacts: (nodeId) => {
+        const state = get()
+        const treeId = state.activeTreeId
+        if (!treeId) return
+        const tree = state.trees[treeId]
+        const node = tree?.nodes[nodeId]
+        if (!node || node.role !== 'assistant' || node.isStreaming) return
+        // Already extracted for this exact content.
+        if (node.artifactIds && node.artifactIds.length > 0) return
+
+        const blocks = parseCodeBlocks(node.content)
+        if (blocks.length === 0) return
+
+        const now = Date.now()
+        const newArtifacts: Record<string, Artifact> = {}
+        const ids: string[] = []
+        blocks.forEach((block, i) => {
+          const id = generateId()
+          ids.push(id)
+          newArtifacts[id] = {
+            id,
+            nodeId,
+            title: makeArtifactTitle(block, i),
+            language: block.language || 'text',
+            kind: detectKind(block.language, block.code),
+            originalCode: block.code,
+            versions: [{ code: block.code, createdAt: now, note: 'Generated' }],
+            currentVersion: 0,
+            createdAt: now,
+            updatedAt: now,
+          }
+        })
+
+        set((s) => {
+          const t = s.trees[treeId]
+          if (!t || !t.nodes[nodeId]) return s
+          return {
+            artifacts: { ...s.artifacts, ...newArtifacts },
+            trees: {
+              ...s.trees,
+              [treeId]: {
+                ...t,
+                nodes: {
+                  ...t.nodes,
+                  [nodeId]: { ...t.nodes[nodeId], artifactIds: ids },
+                },
+              },
+            },
+          }
+        })
+      },
+
+      setOpenArtifact: (artifactId) => set({ openArtifactId: artifactId }),
+
+      addArtifactVersion: (artifactId, code, note) => {
+        set((state) => {
+          const artifact = state.artifacts[artifactId]
+          if (!artifact) return state
+          const versions = [...artifact.versions, { code, createdAt: Date.now(), note }]
+          return {
+            artifacts: {
+              ...state.artifacts,
+              [artifactId]: {
+                ...artifact,
+                versions,
+                currentVersion: versions.length - 1,
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        })
+      },
+
+      setArtifactVersion: (artifactId, version) => {
+        set((state) => {
+          const artifact = state.artifacts[artifactId]
+          if (!artifact) return state
+          const clamped = Math.max(0, Math.min(version, artifact.versions.length - 1))
+          return {
+            artifacts: {
+              ...state.artifacts,
+              [artifactId]: { ...artifact, currentVersion: clamped },
+            },
+          }
+        })
+      },
+
+      deleteArtifact: (artifactId) => {
+        set((state) => {
+          const artifact = state.artifacts[artifactId]
+          if (!artifact) return state
+          const { [artifactId]: _removed, ...rest } = state.artifacts
+          const treeId = state.activeTreeId
+          const tree = treeId ? state.trees[treeId] : null
+          const node = tree?.nodes[artifact.nodeId]
+          const nextTrees =
+            tree && node
+              ? {
+                  ...state.trees,
+                  [treeId!]: {
+                    ...tree,
+                    nodes: {
+                      ...tree.nodes,
+                      [artifact.nodeId]: {
+                        ...node,
+                        artifactIds: (node.artifactIds ?? []).filter((id) => id !== artifactId),
+                      },
+                    },
+                  },
+                }
+              : state.trees
+          return {
+            artifacts: rest,
+            trees: nextTrees,
+            openArtifactId: state.openArtifactId === artifactId ? null : state.openArtifactId,
+          }
+        })
+      },
+
       addProvider: (provider) => {
         set((state) => ({
           providers: { ...state.providers, [provider.id]: provider },
@@ -355,6 +513,13 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'chatgraph-storage',
+      partialize: (state) => ({
+        trees: state.trees,
+        activeTreeId: state.activeTreeId,
+        providers: state.providers,
+        settings: state.settings,
+        artifacts: state.artifacts,
+      }),
     }
   )
 )

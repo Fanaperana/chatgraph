@@ -14,6 +14,34 @@ export interface ChatNode {
   model?: string
   providerId?: string
   isStreaming?: boolean
+  /** When true, the node body is capped and scrolls instead of growing. */
+  scrollable?: boolean
+  /** Artifacts extracted from this node's response (code blocks). */
+  artifactIds?: string[]
+}
+
+export type ArtifactKind = 'code' | 'html' | 'svg' | 'mermaid' | 'markdown'
+
+export interface ArtifactVersion {
+  code: string
+  createdAt: number
+  /** Short description of how this version was produced. */
+  note: string
+}
+
+export interface Artifact {
+  id: string
+  /** The response node this artifact was extracted from. */
+  nodeId: string
+  title: string
+  language: string
+  kind: ArtifactKind
+  /** The originally generated code, used to match the block in the response. */
+  originalCode: string
+  versions: ArtifactVersion[]
+  currentVersion: number
+  createdAt: number
+  updatedAt: number
 }
 
 export interface ChatTree {

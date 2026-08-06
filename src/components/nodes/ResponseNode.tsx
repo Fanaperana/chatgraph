@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Bot, GitFork, RefreshCw, Loader2 } from 'lucide-react'
+import { Bot, GitFork, RefreshCw, Loader2, ScrollText, Maximize2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 import { Markdown } from '@/components/ui/Markdown'
@@ -10,24 +10,35 @@ export interface ResponseNodeData {
   nodeId: string
   model?: string
   isStreaming?: boolean
+  scrollable?: boolean
   [key: string]: unknown
 }
 
 function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodeProps) {
-  const { forkFromNode } = useChatStore()
+  const forkFromNode = useChatStore((s) => s.forkFromNode)
+  const toggleNodeScrollable = useChatStore((s) => s.toggleNodeScrollable)
+  const ensureArtifacts = useChatStore((s) => s.ensureArtifacts)
   const nodeData = data as unknown as ResponseNodeData
   const content = nodeData.content || ''
   const nodeId = nodeData.nodeId || ''
   const model = nodeData.model
   const isStreaming = nodeData.isStreaming
+  const scrollable = nodeData.scrollable
 
-  // Keep the response scrolled to the newest tokens while streaming.
+  // Extract code blocks into artifacts once the response is complete.
+  useEffect(() => {
+    if (!isStreaming && content && nodeId) {
+      ensureArtifacts(nodeId)
+    }
+  }, [isStreaming, content, nodeId, ensureArtifacts])
+
+  // Keep a scrollable response pinned to the newest tokens while streaming.
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (isStreaming && bodyRef.current) {
+    if (isStreaming && scrollable && bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight
     }
-  }, [content, isStreaming])
+  }, [content, isStreaming, scrollable])
 
   return (
     <div className={cn(
@@ -60,10 +71,13 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
           </div>
           <div
             ref={bodyRef}
-            className="chatgraph-scroll max-h-[360px] overflow-y-auto pr-1 nowheel"
+            className={cn(
+              'pr-1 nowheel',
+              scrollable && 'chatgraph-scroll max-h-[300px] overflow-y-auto'
+            )}
           >
             {content ? (
-              <Markdown content={content} />
+              <Markdown content={content} nodeId={nodeId} />
             ) : isStreaming ? (
               <span className="text-sm text-muted-foreground">Generating…</span>
             ) : (
@@ -78,6 +92,16 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
 
       {/* Action buttons */}
       <div className="absolute -top-2 -right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => toggleNodeScrollable(nodeId)}
+          className={cn(
+            'p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent',
+            scrollable && 'text-primary border-primary/40'
+          )}
+          title={scrollable ? 'Expand to full height' : 'Make scrollable (fixed height)'}
+        >
+          {scrollable ? <Maximize2 className="w-3 h-3" /> : <ScrollText className="w-3 h-3" />}
+        </button>
         <button
           onClick={() => forkFromNode(nodeId)}
           className="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"

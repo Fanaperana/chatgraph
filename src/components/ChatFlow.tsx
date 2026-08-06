@@ -29,8 +29,10 @@ const nodeTypes = {
 }
 
 // Rough estimate of a response node's rendered height so Dagre can reserve
-// vertical space (the body is capped/scrolls beyond ~420px).
-function estimateResponseHeight(content: string): number {
+// vertical space. Non-scrollable nodes grow with their content; scrollable
+// nodes are capped to a fixed height.
+function estimateResponseHeight(content: string, scrollable?: boolean): number {
+  if (scrollable) return 360
   if (!content) return 140
   const lines = content.split('\n')
   let rows = 0
@@ -76,7 +78,10 @@ function ChatFlowInner() {
           nodeId: chatNode.id,
           model: chatNode.model,
           isStreaming: chatNode.isStreaming,
-          estHeight: isUser ? undefined : estimateResponseHeight(chatNode.content),
+          scrollable: chatNode.scrollable,
+          estHeight: isUser
+            ? undefined
+            : estimateResponseHeight(chatNode.content, chatNode.scrollable),
         },
       })
 
@@ -133,6 +138,10 @@ function ChatFlowInner() {
     () =>
       JSON.stringify({
         nodeIds: flowNodes.map((n) => n.id).sort(),
+        scrollables: flowNodes
+          .filter((n) => n.data?.scrollable)
+          .map((n) => n.id)
+          .sort(),
         direction: settings.layoutDirection,
       }),
     [flowNodes, settings.layoutDirection]
@@ -143,7 +152,7 @@ function ChatFlowInner() {
   const dataFingerprint = useMemo(
     () =>
       JSON.stringify(
-        flowNodes.map((n) => [n.id, n.data?.content, n.data?.isStreaming, n.data?.model])
+        flowNodes.map((n) => [n.id, n.data?.content, n.data?.isStreaming, n.data?.model, n.data?.scrollable])
       ),
     [flowNodes]
   )
