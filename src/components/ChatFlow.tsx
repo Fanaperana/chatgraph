@@ -174,7 +174,7 @@ function ChatFlowInner() {
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} className="opacity-30" />
         <Controls className="!bg-card !border-border !shadow-lg [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
         <MiniMap
-          className="!bg-card !border-border"
+          className="!bg-card !border-border !rounded-[3px]"
           nodeColor={(node) => {
             if (node.type === 'promptNode') return 'var(--color-primary)'
             if (node.type === 'responseNode') return 'var(--color-muted-foreground)'
