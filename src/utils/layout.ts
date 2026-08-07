@@ -6,9 +6,9 @@ import type { LayoutDirection } from '@/types/chat'
 const NODE_WIDTH_PROMPT = 300
 const NODE_WIDTH_RESPONSE = 340
 const NODE_WIDTH_INPUT = 380
-const NODE_HEIGHT_PROMPT = 100
-const NODE_HEIGHT_RESPONSE = 140
-const NODE_HEIGHT_INPUT = 80
+const NODE_HEIGHT_PROMPT = 84
+const NODE_HEIGHT_RESPONSE = 92
+const NODE_HEIGHT_INPUT = 72
 
 function getNodeDimensions(node: Node) {
   switch (node.type) {
@@ -37,8 +37,8 @@ export function getLayoutedElements(
 
   g.setGraph({
     rankdir: direction,
-    nodesep: 60,
-    ranksep: 80,
+    nodesep: 48,
+    ranksep: 52,
     marginx: 20,
     marginy: 20,
     align: 'UL',

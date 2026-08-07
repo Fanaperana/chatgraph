@@ -30,14 +30,14 @@ const nodeTypes = {
 
 // Rough estimate of a response node's rendered height so Dagre can reserve
 // vertical space. Non-scrollable nodes grow with their content; scrollable
-// nodes are capped to a fixed height.
+// nodes are capped to a fixed height. Kept tight to avoid large gaps.
 function estimateResponseHeight(content: string, scrollable?: boolean): number {
-  if (scrollable) return 360
-  if (!content) return 140
+  if (scrollable) return 340
+  if (!content) return 96
   const lines = content.split('\n')
   let rows = 0
-  for (const line of lines) rows += Math.max(1, Math.ceil(line.length / 44))
-  return 72 + rows * 21
+  for (const line of lines) rows += Math.max(1, Math.ceil(line.length / 46))
+  return 52 + rows * 20
 }
 
 function ChatFlowInner() {

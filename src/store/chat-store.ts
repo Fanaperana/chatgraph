@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ChatNode, ChatTree, LLMProviderConfig, AppSettings, LayoutDirection, ChatMode, Artifact } from '@/types/chat'
-import { parseCodeBlocks, detectKind, makeArtifactTitle } from '@/utils/artifacts'
+import { parseCodeBlocks, detectKind, makeArtifactTitle, isArtifactWorthy } from '@/utils/artifacts'
 
 function generateId(): string {
   return crypto.randomUUID()
@@ -367,10 +367,13 @@ export const useChatStore = create<ChatState>()(
         const blocks = parseCodeBlocks(node.content)
         if (blocks.length === 0) return
 
+        const worthy = blocks.filter(isArtifactWorthy)
+        if (worthy.length === 0) return
+
         const now = Date.now()
         const newArtifacts: Record<string, Artifact> = {}
         const ids: string[] = []
-        blocks.forEach((block, i) => {
+        worthy.forEach((block, i) => {
           const id = generateId()
           ids.push(id)
           newArtifacts[id] = {

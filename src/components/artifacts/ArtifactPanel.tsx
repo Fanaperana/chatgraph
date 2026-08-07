@@ -7,6 +7,14 @@ import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
+import { rust } from '@codemirror/lang-rust'
+import { go } from '@codemirror/lang-go'
+import { yaml } from '@codemirror/lang-yaml'
+import { sql } from '@codemirror/lang-sql'
+import { cpp } from '@codemirror/lang-cpp'
+import { java } from '@codemirror/lang-java'
+import { php } from '@codemirror/lang-php'
+import { xml } from '@codemirror/lang-xml'
 import type { Extension } from '@codemirror/state'
 import {
   X,
@@ -42,10 +50,18 @@ function languageExtension(lang: string): Extension[] {
   if (['js', 'jsx', 'javascript'].includes(l)) return [javascript({ jsx: true })]
   if (['ts', 'tsx', 'typescript'].includes(l)) return [javascript({ jsx: true, typescript: true })]
   if (['py', 'python'].includes(l)) return [python()]
-  if (['html', 'htm', 'svg', 'xml'].includes(l)) return [html()]
+  if (['html', 'htm'].includes(l)) return [html()]
+  if (['svg', 'xml'].includes(l)) return [xml()]
   if (l === 'css') return [css()]
   if (l === 'json') return [json()]
   if (['md', 'markdown'].includes(l)) return [markdown()]
+  if (['rs', 'rust'].includes(l)) return [rust()]
+  if (l === 'go') return [go()]
+  if (['yml', 'yaml'].includes(l)) return [yaml()]
+  if (l === 'sql') return [sql()]
+  if (['c', 'cpp', 'c++', 'h', 'hpp', 'cc'].includes(l)) return [cpp()]
+  if (l === 'java') return [java()]
+  if (l === 'php') return [php()]
   return []
 }
 
