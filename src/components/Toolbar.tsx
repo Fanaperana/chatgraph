@@ -1,9 +1,23 @@
 import { useState } from 'react'
-import { Plus, Settings2, Download, Upload, FolderTree, ArrowDownUp, ArrowRightLeft, AlignCenter, Trash2 } from 'lucide-react'
+import { Plus, Settings2, Download, Upload, FolderTree, ArrowDownUp, ArrowRightLeft, AlignCenter, Trash2, Boxes, Code2, FileCode, Braces } from 'lucide-react'
 import { useChatStore } from '@/store'
 import { cn } from '@/lib/utils'
+import { languageLabel } from '@/utils/artifacts'
+import type { Artifact } from '@/types/chat'
 import { SettingsPanel } from '@/components/SettingsPanel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip'
+
+function artifactIcon(artifact: Artifact) {
+  switch (artifact.kind) {
+    case 'html':
+    case 'svg':
+      return <FileCode className="w-4 h-4" />
+    case 'mermaid':
+      return <Braces className="w-4 h-4" />
+    default:
+      return <Code2 className="w-4 h-4" />
+  }
+}
 
 interface ToolbarProps {
   onSnapToLayout?: () => void
@@ -12,8 +26,16 @@ interface ToolbarProps {
 
 export function Toolbar({ onSnapToLayout, isDragged }: ToolbarProps) {
   const { trees, activeTreeId, createTree, setActiveTree, deleteTree, settings, setLayoutDirection } = useChatStore()
+  const artifacts = useChatStore((s) => s.artifacts)
+  const setOpenArtifact = useChatStore((s) => s.setOpenArtifact)
   const [showSettings, setShowSettings] = useState(false)
   const [showTreeList, setShowTreeList] = useState(false)
+  const [showArtifacts, setShowArtifacts] = useState(false)
+
+  const activeTree = activeTreeId ? trees[activeTreeId] : undefined
+  const treeArtifacts = Object.values(artifacts)
+    .filter((a) => activeTree?.nodes?.[a.nodeId])
+    .sort((a, b) => b.updatedAt - a.updatedAt)
 
   const handleExport = () => {
     const state = useChatStore.getState()
@@ -142,6 +164,57 @@ export function Toolbar({ onSnapToLayout, isDragged }: ToolbarProps) {
               {settings.layoutDirection === 'TB' ? 'Switch to Left-Right' : 'Switch to Top-Down'}
             </TooltipContent>
           </Tooltip>
+
+          <div className="relative">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setShowArtifacts((v) => !v)}
+                  className={cn(
+                    'relative flex items-center gap-1.5 px-2 py-2 rounded-lg bg-card border shadow-lg transition-all',
+                    showArtifacts
+                      ? 'border-primary text-primary'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
+                  )}
+                >
+                  <Boxes className="w-4 h-4" />
+                  {treeArtifacts.length > 0 && (
+                    <span className="text-xs font-medium tabular-nums">{treeArtifacts.length}</span>
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Artifacts</TooltipContent>
+            </Tooltip>
+
+            {showArtifacts && (
+              <div className="absolute top-full right-0 mt-1 w-72 rounded-lg border border-border bg-card shadow-xl p-1 max-h-80 overflow-y-auto">
+                {treeArtifacts.length === 0 && (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">No artifacts yet</p>
+                )}
+                {treeArtifacts.map((artifact) => {
+                  const code = artifact.versions[artifact.currentVersion]?.code ?? ''
+                  const lineCount = code.split('\n').length
+                  return (
+                    <button
+                      key={artifact.id}
+                      onClick={() => { setOpenArtifact(artifact.id); setShowArtifacts(false) }}
+                      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent"
+                    >
+                      <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        {artifactIcon(artifact)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-foreground">{artifact.title}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {languageLabel(artifact.language)} · {lineCount} lines · v{artifact.currentVersion + 1}/{artifact.versions.length}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           <Tooltip>
             <TooltipTrigger asChild>

@@ -48,6 +48,7 @@ function ChatFlowInner() {
   // Track whether the user has manually dragged nodes
   const [isDragged, setIsDragged] = useState(false)
   const prevStructureRef = useRef<string | null>(null)
+  const measureSigRef = useRef<string>('')
   // The node the viewport is currently following (streaming or just-finished).
   const focusRef = useRef<string | null>(null)
   const lastFollowRef = useRef(0)
@@ -116,6 +117,27 @@ function ChatFlowInner() {
         target: inputId,
         type: 'smoothstep',
         style: { stroke: 'var(--color-border)', strokeWidth: 1, strokeDasharray: '4 4' },
+      })
+    })
+
+    // Add extra input nodes at fork points, so the user can start an
+    // alternative branch from a node (even one that already has an input).
+    const forkPoints = tree.forkPoints ?? []
+    forkPoints.forEach((parentId) => {
+      if (!tree.nodes[parentId]) return // node was removed
+      const inputId = `input-fork-${parentId}`
+      nodes.push({
+        id: inputId,
+        type: 'inputNode',
+        position: { x: 0, y: 0 },
+        data: { parentNodeId: parentId },
+      })
+      edges.push({
+        id: `${parentId}-${inputId}`,
+        source: parentId,
+        target: inputId,
+        type: 'smoothstep',
+        style: { stroke: 'var(--color-primary)', strokeWidth: 1, strokeDasharray: '4 4' },
       })
     })
 
@@ -190,6 +212,41 @@ function ChatFlowInner() {
     }
   }, [structureFingerprint, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
 
+  // Refine the layout using the real measured node heights (reported by React
+  // Flow after render) so the spacing between every rank is uniform, instead of
+  // relying on the rough height estimate. Runs whenever measurements change.
+  useEffect(() => {
+    if (isDragged) return
+    const heights: Record<string, number> = {}
+    let measuredCount = 0
+    for (const n of nodes) {
+      const h = n.measured?.height
+      if (typeof h === 'number' && h > 0) {
+        heights[n.id] = h
+        measuredCount++
+      }
+    }
+    // Wait until every node has been measured to avoid a partial, jumpy pass.
+    if (measuredCount === 0 || measuredCount < nodes.length) return
+
+    const sig = `${structureFingerprint}|${Object.entries(heights)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([id, h]) => `${id}:${Math.round(h)}`)
+      .join(',')}`
+    if (sig === measureSigRef.current) return
+    measureSigRef.current = sig
+
+    const { nodes: relaid } = getLayoutedElements(flowNodes, flowEdges, settings.layoutDirection, heights)
+    const posById = new Map(relaid.map((n) => [n.id, n.position]))
+    setNodes((prev) =>
+      prev.map((n) => {
+        const pos = posById.get(n.id)
+        return pos ? { ...n, position: pos } : n
+      })
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, structureFingerprint, isDragged])
+
   // Auto-center the response node as it generates, and re-center once when it
   // finishes (instead of zooming back out to the whole graph).
   useEffect(() => {
@@ -253,11 +310,28 @@ function ChatFlowInner() {
 
   // "Snap to layout" button handler
   const snapToLayout = useCallback(() => {
-    setNodes(layoutedNodes)
-    setEdges(layoutedEdges)
+    // Prefer the real measured heights so the snapped layout matches what the
+    // refinement effect produces (uniform gaps), instead of the rough estimate.
+    const heights: Record<string, number> = {}
+    for (const n of nodes) {
+      const h = n.measured?.height
+      if (typeof h === 'number' && h > 0) heights[n.id] = h
+    }
+    const useMeasured = Object.keys(heights).length === nodes.length && nodes.length > 0
+    const { nodes: snapped, edges: snappedEdges } = useMeasured
+      ? getLayoutedElements(flowNodes, flowEdges, settings.layoutDirection, heights)
+      : { nodes: layoutedNodes, edges: layoutedEdges }
+    const posById = new Map(snapped.map((n) => [n.id, n.position]))
+    setNodes((prev) =>
+      prev.map((n) => {
+        const pos = posById.get(n.id)
+        return pos ? { ...n, position: pos } : n
+      })
+    )
+    setEdges(snappedEdges)
     setIsDragged(false)
     setTimeout(() => fitView({ duration: 300 }), 20)
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
+  }, [nodes, flowNodes, flowEdges, settings.layoutDirection, layoutedNodes, layoutedEdges, setNodes, setEdges, fitView])
 
   return (
     <div className="w-full h-full relative">

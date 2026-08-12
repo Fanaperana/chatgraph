@@ -49,6 +49,9 @@ export interface ChatTree {
   name: string
   rootNodeId: string | null
   nodes: Record<string, ChatNode>
+  // Node ids that should show an extra input node as a child, so the user can
+  // start an alternative branch from a node that already has children.
+  forkPoints?: string[]
   createdAt: number
   updatedAt: number
 }

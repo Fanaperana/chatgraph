@@ -254,7 +254,10 @@ export const useChatStore = create<ChatState>()(
       },
 
       forkFromNode: (nodeId) => {
-        // Creates an empty user node as sibling (same parent as nodeId)
+        // Marks a node as a fork point so an extra input node appears as its
+        // child, letting the user compose an alternative branch from here.
+        // For assistant nodes the branch continues from the node itself; for
+        // user nodes it branches from the parent (an alternative prompt).
         const state = get()
         const treeId = state.activeTreeId
         if (!treeId) return ''
@@ -265,7 +268,27 @@ export const useChatStore = create<ChatState>()(
         const targetNode = tree.nodes[nodeId]
         if (!targetNode) return ''
 
-        return get().addNode('user', '', targetNode.parentId)
+        const forkParent =
+          targetNode.role === 'user' ? targetNode.parentId ?? nodeId : nodeId
+
+        set((s) => {
+          const t = s.trees[treeId]
+          if (!t) return s
+          const existing = t.forkPoints ?? []
+          if (existing.includes(forkParent)) return s
+          return {
+            trees: {
+              ...s.trees,
+              [treeId]: {
+                ...t,
+                forkPoints: [...existing, forkParent],
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        })
+
+        return forkParent
       },
 
       duplicateWithEdit: (nodeId, newContent) => {
