@@ -1,6 +1,6 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { GitFork, Copy, Pencil, Trash2, User } from 'lucide-react'
+import { GitFork, Copy, Pencil, Trash2, User, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 
@@ -15,6 +15,8 @@ function PromptNodeComponent({ data, sourcePosition, targetPosition }: NodeProps
   const nodeData = data as unknown as PromptNodeData
   const content = nodeData.content || ''
   const nodeId = nodeData.nodeId || ''
+  const [expanded, setExpanded] = useState(false)
+  const isLong = content.length > 160 || content.split('\n').length > 4
 
   return (
     <div className={cn(
@@ -33,9 +35,30 @@ function PromptNodeComponent({ data, sourcePosition, targetPosition }: NodeProps
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium text-muted-foreground mb-1">You</p>
-          <p className="text-sm text-foreground leading-relaxed line-clamp-4 whitespace-pre-wrap">
+          <p
+            className={cn(
+              'text-sm text-foreground leading-relaxed whitespace-pre-wrap',
+              !expanded && 'line-clamp-4'
+            )}
+          >
             {content || <span className="text-muted-foreground italic">Empty prompt</span>}
           </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-1 flex items-center gap-1 text-xs text-primary/80 hover:text-primary transition-colors"
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp className="w-3 h-3" /> Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3 h-3" /> Show more
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
