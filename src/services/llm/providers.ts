@@ -16,6 +16,13 @@ export interface LLMProvider {
   listModels(config: LLMProviderConfig): Promise<string[]>
 }
 
+interface CopilotModel {
+  id: string
+  model_picker_enabled?: boolean
+  supported_endpoints?: string[]
+  capabilities?: { type?: string }
+}
+
 export class OllamaProvider implements LLMProvider {
   async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
     const baseUrl = getProxiedUrl(config.endpoint, 'ollama')
@@ -298,11 +305,19 @@ export class CopilotProvider implements LLMProvider {
       })
       if (!response.ok) return config.models
       const data = await response.json()
-      // Copilot API returns { data: [{ id: "model-name" }, ...] }
+      // Copilot API returns { data: [{ id, supported_endpoints, capabilities, ... }] }
       if (Array.isArray(data.data)) {
-        // Deduplicate model ids
-        const ids = data.data.map((m: { id: string }) => m.id).filter(Boolean)
-        return Array.from(new Set(ids))
+        const chatModels = data.data.filter((m: CopilotModel) => {
+          // Only models served by /chat/completions work here; others (e.g. some
+          // grok / gpt-5 variants) are /responses-only and return a 400.
+          const endpoints = m.supported_endpoints
+          const supportsChat = Array.isArray(endpoints)
+            ? endpoints.includes('/chat/completions')
+            : m.capabilities?.type === 'chat'
+          return supportsChat && m.model_picker_enabled !== false
+        })
+        const ids = chatModels.map((m: CopilotModel) => m.id).filter(Boolean)
+        return Array.from(new Set(ids)) as string[]
       }
       return config.models
     } catch {

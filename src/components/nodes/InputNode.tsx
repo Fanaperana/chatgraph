@@ -1,11 +1,13 @@
 import { memo, useState, useCallback, useEffect } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Plus, Send, Brain, Settings2, ChevronDown } from 'lucide-react'
+import { Plus, Send, Brain, Settings2, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 import { sendMessage } from '@/services/chat-service'
 import { getStoredToken } from '@/services/auth/github'
 import { getProvider } from '@/services/llm/providers'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 
 export interface InputNodeData {
   parentNodeId: string | null
@@ -15,14 +17,14 @@ export interface InputNodeData {
 function InputNodeComponent({ data, targetPosition }: NodeProps) {
   const [content, setContent] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showModelPicker, setShowModelPicker] = useState(false)
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
   const [showModePicker, setShowModePicker] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({})
   const { settings, providers, setActiveProvider, setActiveModel, setChatMode } = useChatStore()
 
   // Fetch models from providers when picker opens
   useEffect(() => {
-    if (!showModelPicker) return
+    if (!modelPickerOpen) return
     Object.values(providers).forEach(async (provider) => {
       if (provider.type === 'copilot' && !getStoredToken()) return
       try {
@@ -33,7 +35,7 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
         // Keep existing models on error
       }
     })
-  }, [showModelPicker, providers])
+  }, [modelPickerOpen, providers])
   const nodeData = data as unknown as InputNodeData
   const parentNodeId = nodeData.parentNodeId
 
@@ -78,7 +80,7 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
         {/* Chat mode picker */}
         <div className="relative">
           <button
-            onClick={() => { setShowModePicker(!showModePicker); setShowModelPicker(false) }}
+            onClick={() => { setShowModePicker(!showModePicker); setModelPickerOpen(false) }}
             className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-accent text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <Brain className="w-3 h-3" />
@@ -104,54 +106,55 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
         </div>
 
         {/* Model picker */}
-        <div className="relative">
-          <button
-            onClick={() => { setShowModelPicker(!showModelPicker); setShowModePicker(false) }}
-            className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-accent text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
-          >
-            <span className="max-w-[100px] truncate">{settings.activeModel ?? 'Select model'}</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showModelPicker && (
-            <div className="absolute top-full left-0 mt-1 z-50 w-56 rounded-lg border border-border bg-card shadow-xl p-1 max-h-48 overflow-y-auto">
-              {Object.values(providers).map((provider) => {
-                // For copilot, only show models if token is available
-                if (provider.type === 'copilot' && !getStoredToken()) return null
+        <Popover open={modelPickerOpen} onOpenChange={(o) => { setModelPickerOpen(o); if (o) setShowModePicker(false) }}>
+          <PopoverTrigger asChild>
+            <button
+              role="combobox"
+              aria-expanded={modelPickerOpen}
+              className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-accent text-xs text-muted-foreground hover:text-foreground transition-colors font-mono"
+            >
+              <span className="max-w-[100px] truncate">{settings.activeModel ?? 'Select model'}</span>
+              <ChevronsUpDown className="w-3 h-3 opacity-60" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search models..." />
+              <CommandList>
+                <CommandEmpty>No model found.</CommandEmpty>
+                {Object.values(providers).map((provider) => {
+                  // For copilot, only show models if token is available
+                  if (provider.type === 'copilot' && !getStoredToken()) return null
 
-                const models = fetchedModels[provider.id] ?? provider.models
-                if (models.length === 0) return null
-                return (
-                  <div key={provider.id}>
-                    <p className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      {provider.name}
-                    </p>
-                    {models.map((model) => (
-                      <button
-                        key={`${provider.id}-${model}`}
-                        onClick={() => {
-                          setActiveProvider(provider.id)
-                          setActiveModel(model)
-                          setShowModelPicker(false)
-                        }}
-                        className={cn(
-                          'w-full text-left px-3 py-1.5 rounded-md text-xs font-mono transition-colors',
-                          settings.activeModel === model && settings.activeProviderId === provider.id
-                            ? 'bg-primary/10 text-primary'
-                            : 'hover:bg-accent'
-                        )}
-                      >
-                        {model}
-                      </button>
-                    ))}
-                  </div>
-                )
-              })}
-              {Object.keys(providers).length === 0 && (
-                <p className="px-3 py-2 text-xs text-muted-foreground">No providers configured</p>
-              )}
-            </div>
-          )}
-        </div>
+                  const models = fetchedModels[provider.id] ?? provider.models
+                  if (models.length === 0) return null
+                  return (
+                    <CommandGroup key={provider.id} heading={provider.name}>
+                      {models.map((model) => {
+                        const isActive = settings.activeModel === model && settings.activeProviderId === provider.id
+                        return (
+                          <CommandItem
+                            key={`${provider.id}-${model}`}
+                            value={`${provider.name} ${model}`}
+                            onSelect={() => {
+                              setActiveProvider(provider.id)
+                              setActiveModel(model)
+                              setModelPickerOpen(false)
+                            }}
+                            className="font-mono text-xs"
+                          >
+                            <Check className={cn('h-3.5 w-3.5', isActive ? 'opacity-100 text-primary' : 'opacity-0')} />
+                            <span className="truncate">{model}</span>
+                          </CommandItem>
+                        )
+                      })}
+                    </CommandGroup>
+                  )
+                })}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
         <div className="ml-auto flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground px-1.5 py-0.5 rounded bg-secondary capitalize">
