@@ -20,7 +20,7 @@ function PromptNodeComponent({ data, sourcePosition, targetPosition }: NodeProps
 
   return (
     <div className={cn(
-      'group relative w-[300px] rounded-md border border-primary/20 bg-primary/5 px-2 pb-2 pt-1 shadow-sm',
+      'group relative w-[300px] rounded-md border border-primary/20 bg-primary/5 px-2 pb-2 pt-1.5 shadow-sm',
       'hover:border-primary/40 hover:shadow-md transition-all duration-200'
     )}>
       <Handle

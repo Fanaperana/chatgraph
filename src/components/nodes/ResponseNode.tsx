@@ -42,7 +42,7 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
 
   return (
     <div className={cn(
-      'group relative w-[340px] rounded-md border border-border bg-card p-3 shadow-sm',
+      'group relative w-[340px] rounded-md border border-border bg-card px-2 pb-2 pt-1.5 shadow-sm',
       'hover:border-muted-foreground/30 hover:shadow-md transition-all duration-200',
       isStreaming && 'border-primary/40 shadow-[0_0_0_1px_var(--color-primary)]'
     )}>
