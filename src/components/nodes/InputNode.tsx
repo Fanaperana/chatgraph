@@ -59,7 +59,7 @@ function InputNodeComponent({ data, targetPosition }: NodeProps) {
 
   return (
     <div className={cn(
-      'w-[380px] rounded-2xl border border-border bg-card shadow-lg',
+      'w-[380px] rounded-md border border-border bg-card shadow-lg',
       'hover:border-primary/30 transition-all duration-200'
     )}>
       <Handle
