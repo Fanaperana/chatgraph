@@ -195,6 +195,38 @@ export class CopilotProvider implements LLMProvider {
   // Cache the short-lived Copilot token exchanged from the GitHub token.
   private static copilotToken: string | null = null
   private static copilotTokenExpiry = 0
+  // Per-model endpoint routing, learned from the /models response.
+  private static modelEndpoints: Record<string, string> = {}
+
+  private static indexEndpoints(models: CopilotModel[]): void {
+    for (const m of models) {
+      if (!m.id) continue
+      const eps = m.supported_endpoints
+      CopilotProvider.modelEndpoints[m.id] = Array.isArray(eps)
+        ? eps.includes('/chat/completions')
+          ? '/chat/completions'
+          : eps.includes('/responses')
+            ? '/responses'
+            : '/chat/completions'
+        : '/chat/completions'
+    }
+  }
+
+  // Ensure the model->endpoint map is populated before routing a chat request.
+  private static async ensureModelEndpoints(githubToken: string): Promise<void> {
+    if (Object.keys(CopilotProvider.modelEndpoints).length > 0) return
+    try {
+      const copilotToken = await CopilotProvider.getCopilotToken(githubToken)
+      const response = await fetch(`${CopilotProvider.apiBaseUrl}/models`, {
+        headers: CopilotProvider.copilotHeaders(copilotToken),
+      })
+      if (!response.ok) return
+      const data = await response.json()
+      if (Array.isArray(data.data)) CopilotProvider.indexEndpoints(data.data)
+    } catch {
+      // Fall back to /chat/completions when the map can't be built.
+    }
+  }
 
   private static get tokenExchangeUrl(): string {
     return isDev ? '/api/copilot-token' : 'https://api.github.com/copilot_internal/v2/token'
@@ -251,12 +283,20 @@ export class CopilotProvider implements LLMProvider {
     if (!githubToken) throw new Error('Not signed in to GitHub. Please connect via Settings.')
 
     const copilotToken = await CopilotProvider.getCopilotToken(githubToken)
+    const model = config.defaultModel || 'gpt-4o'
+
+    // Route dynamically: responses-only models (e.g. grok) use /responses.
+    await CopilotProvider.ensureModelEndpoints(githubToken)
+    if (CopilotProvider.modelEndpoints[model] === '/responses') {
+      yield* this.chatViaResponses(messages, config, copilotToken, model)
+      return
+    }
 
     const response = await fetch(`${CopilotProvider.apiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: CopilotProvider.copilotHeaders(copilotToken),
       body: JSON.stringify({
-        model: config.defaultModel || 'gpt-4o',
+        model,
         messages,
         stream: true,
         temperature: config.temperature ?? 0.7,
@@ -294,6 +334,59 @@ export class CopilotProvider implements LLMProvider {
     }
   }
 
+  // Streams from the OpenAI-style /responses endpoint (typed SSE events).
+  private async *chatViaResponses(
+    messages: ChatMessage[],
+    config: LLMProviderConfig,
+    copilotToken: string,
+    model: string
+  ): AsyncGenerator<string> {
+    const response = await fetch(`${CopilotProvider.apiBaseUrl}/responses`, {
+      method: 'POST',
+      headers: CopilotProvider.copilotHeaders(copilotToken),
+      body: JSON.stringify({
+        model,
+        input: messages.map((m) => ({ role: m.role, content: m.content })),
+        stream: true,
+        temperature: config.temperature ?? 0.7,
+      }),
+    })
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '')
+      throw new Error(`Copilot API error (${response.status}): ${errBody || response.statusText}`)
+    }
+    if (!response.body) throw new Error('No response body')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      // Buffer across reads so an SSE line split between chunks isn't lost.
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6).trim()
+        if (!data || data === '[DONE]') continue
+        try {
+          const json = JSON.parse(data)
+          if (json.type === 'response.output_text.delta' && typeof json.delta === 'string') {
+            yield json.delta
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+
   async listModels(config: LLMProviderConfig): Promise<string[]> {
     const githubToken = config.apiKey || getStoredToken()
     if (!githubToken) return config.models
@@ -307,16 +400,11 @@ export class CopilotProvider implements LLMProvider {
       const data = await response.json()
       // Copilot API returns { data: [{ id, supported_endpoints, capabilities, ... }] }
       if (Array.isArray(data.data)) {
-        const chatModels = data.data.filter((m: CopilotModel) => {
-          // Only models served by /chat/completions work here; others (e.g. some
-          // grok / gpt-5 variants) are /responses-only and return a 400.
-          const endpoints = m.supported_endpoints
-          const supportsChat = Array.isArray(endpoints)
-            ? endpoints.includes('/chat/completions')
-            : m.capabilities?.type === 'chat'
-          return supportsChat && m.model_picker_enabled !== false
-        })
-        const ids = chatModels.map((m: CopilotModel) => m.id).filter(Boolean)
+        // Learn each model's endpoint so chat() can route dynamically.
+        CopilotProvider.indexEndpoints(data.data)
+        const ids = data.data
+          .filter((m: CopilotModel) => m.id && m.model_picker_enabled !== false)
+          .map((m: CopilotModel) => m.id)
         return Array.from(new Set(ids)) as string[]
       }
       return config.models
