@@ -20,7 +20,7 @@ function PromptNodeComponent({ data, sourcePosition, targetPosition }: NodeProps
 
   return (
     <div className={cn(
-      'group relative w-[300px] rounded-xl border border-primary/20 bg-primary/5 p-3 shadow-sm',
+      'group relative w-[300px] rounded-md border border-primary/20 bg-primary/5 px-2 pb-2 pt-1 shadow-sm',
       'hover:border-primary/40 hover:shadow-md transition-all duration-200'
     )}>
       <Handle
@@ -30,11 +30,13 @@ function PromptNodeComponent({ data, sourcePosition, targetPosition }: NodeProps
       />
 
       <div className="flex items-start gap-2">
-        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-          <User className="w-3.5 h-3.5 text-primary" />
-        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground mb-1">You</p>
+          <div className="flex items-center justify-start mb-1 gap-2">
+            <div className="bg-secondary flex items-center justify-center border rounded-md">
+              <User className="w-3 h-3 text-muted-foreground" />
+            </div>
+            <p className="text-xs font-medium text-muted-foreground">You</p>
+          </div>
           <p
             className={cn(
               'text-sm text-foreground leading-relaxed whitespace-pre-wrap',
