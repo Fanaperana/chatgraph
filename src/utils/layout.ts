@@ -40,6 +40,16 @@ export function getLayoutedElements(
 
   const isHorizontal = direction === 'LR'
 
+  // Reasoning/thinking nodes hang off the RIGHT side of their anchor and must
+  // not participate in dagre's ranking (otherwise they stack underneath).
+  const thinkingIds = new Set(
+    nodes.filter((n) => n.type === 'thinkingNode').map((n) => n.id)
+  )
+  const mainNodes = nodes.filter((n) => !thinkingIds.has(n.id))
+  const mainEdges = edges.filter(
+    (e) => !thinkingIds.has(e.source) && !thinkingIds.has(e.target)
+  )
+
   g.setGraph({
     rankdir: direction,
     nodesep: 48,
@@ -49,31 +59,50 @@ export function getLayoutedElements(
     align: 'UL',
   })
 
-  nodes.forEach((node) => {
+  mainNodes.forEach((node) => {
     const { width, height } = getNodeDimensions(node, heights)
     g.setNode(node.id, { width, height })
   })
 
-  edges.forEach((edge) => {
+  mainEdges.forEach((edge) => {
     g.setEdge(edge.source, edge.target)
   })
 
   dagre.layout(g)
 
-  const layoutedNodes = nodes.map((node) => {
+  const posMap: Record<string, { x: number; y: number; width: number; height: number }> = {}
+  const layoutedMain = mainNodes.map((node) => {
     const nodeWithPosition = g.node(node.id)
     const { width, height } = getNodeDimensions(node, heights)
+    const x = nodeWithPosition.x - width / 2
+    const y = nodeWithPosition.y - height / 2
+    posMap[node.id] = { x, y, width, height }
 
     return {
       ...node,
       targetPosition: isHorizontal ? Position.Left : Position.Top,
       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-      position: {
-        x: nodeWithPosition.x - width / 2,
-        y: nodeWithPosition.y - height / 2,
-      },
+      position: { x, y },
     }
   })
 
-  return { nodes: layoutedNodes, edges }
+  // Place each thinking node just to the right of its anchor, top-aligned.
+  const GAP = 40
+  const thinkingNodes = nodes.filter((n) => thinkingIds.has(n.id))
+  const layoutedThinking = thinkingNodes.map((node) => {
+    const anchorId = edges.find((e) => e.target === node.id)?.source
+    const anchor = anchorId ? posMap[anchorId] : undefined
+    const position = anchor
+      ? { x: anchor.x + anchor.width + GAP, y: anchor.y }
+      : { x: 0, y: 0 }
+
+    return {
+      ...node,
+      targetPosition: Position.Left,
+      sourcePosition: Position.Right,
+      position,
+    }
+  })
+
+  return { nodes: [...layoutedMain, ...layoutedThinking], edges }
 }

@@ -12,9 +12,13 @@ function getProxiedUrl(endpoint: string, providerType: string): string {
 }
 
 export interface LLMProvider {
-  chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string, void, unknown>
+  chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<StreamChunk, void, unknown>
   listModels(config: LLMProviderConfig): Promise<string[]>
 }
+
+// A streamed piece of a response: a plain string is visible answer text; the
+// `{ reasoning }` form carries the model's thinking/reasoning tokens.
+export type StreamChunk = string | { reasoning: string }
 
 interface CopilotModel {
   id: string
@@ -134,7 +138,7 @@ export class LlamaCppProvider implements LLMProvider {
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
-  async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
+  async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<StreamChunk> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`
 
@@ -168,8 +172,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (data === '[DONE]') return
         try {
           const json = JSON.parse(data)
-          const content = json.choices?.[0]?.delta?.content
-          if (content) yield content
+          const delta = json.choices?.[0]?.delta
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning
+          if (typeof reasoning === 'string' && reasoning) yield { reasoning }
+          if (delta?.content) yield delta.content
         } catch {
           // skip
         }
@@ -278,7 +284,7 @@ export class CopilotProvider implements LLMProvider {
     return data.token
   }
 
-  async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<string> {
+  async *chat(messages: ChatMessage[], config: LLMProviderConfig): AsyncGenerator<StreamChunk> {
     const githubToken = config.apiKey || getStoredToken()
     if (!githubToken) throw new Error('Not signed in to GitHub. Please connect via Settings.')
 
@@ -325,8 +331,10 @@ export class CopilotProvider implements LLMProvider {
         if (data === '[DONE]') return
         try {
           const json = JSON.parse(data)
-          const content = json.choices?.[0]?.delta?.content
-          if (content) yield content
+          const delta = json.choices?.[0]?.delta
+          const reasoning = delta?.reasoning_content ?? delta?.reasoning
+          if (typeof reasoning === 'string' && reasoning) yield { reasoning }
+          if (delta?.content) yield delta.content
         } catch {
           // skip
         }
@@ -340,7 +348,7 @@ export class CopilotProvider implements LLMProvider {
     config: LLMProviderConfig,
     copilotToken: string,
     model: string
-  ): AsyncGenerator<string> {
+  ): AsyncGenerator<StreamChunk> {
     const response = await fetch(`${CopilotProvider.apiBaseUrl}/responses`, {
       method: 'POST',
       headers: CopilotProvider.copilotHeaders(copilotToken),
@@ -379,6 +387,13 @@ export class CopilotProvider implements LLMProvider {
           const json = JSON.parse(data)
           if (json.type === 'response.output_text.delta' && typeof json.delta === 'string') {
             yield json.delta
+          } else if (
+            typeof json.type === 'string' &&
+            json.type.includes('reasoning') &&
+            json.type.endsWith('.delta') &&
+            typeof json.delta === 'string'
+          ) {
+            yield { reasoning: json.delta }
           }
         } catch {
           // skip

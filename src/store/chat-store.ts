@@ -23,6 +23,7 @@ interface ChatState {
   // Node actions
   addNode: (role: ChatNode['role'], content: string, parentId: string | null) => string
   updateNodeContent: (nodeId: string, content: string) => void
+  updateNodeReasoning: (nodeId: string, reasoning: string) => void
   setNodeStreaming: (nodeId: string, streaming: boolean) => void
   toggleNodeScrollable: (nodeId: string) => void
   forkFromNode: (nodeId: string) => string
@@ -195,6 +196,30 @@ export const useChatStore = create<ChatState>()(
                 nodes: {
                   ...tree.nodes,
                   [nodeId]: { ...tree.nodes[nodeId], content },
+                },
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        })
+      },
+
+      updateNodeReasoning: (nodeId, reasoning) => {
+        const treeId = get().activeTreeId
+        if (!treeId) return
+
+        set((state) => {
+          const tree = state.trees[treeId]
+          if (!tree || !tree.nodes[nodeId]) return state
+
+          return {
+            trees: {
+              ...state.trees,
+              [treeId]: {
+                ...tree,
+                nodes: {
+                  ...tree.nodes,
+                  [nodeId]: { ...tree.nodes[nodeId], reasoning },
                 },
                 updatedAt: Date.now(),
               },

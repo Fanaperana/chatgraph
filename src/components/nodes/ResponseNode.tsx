@@ -1,9 +1,10 @@
-import { memo, useEffect, useRef } from 'react'
+import { memo, useEffect, useRef, useState, useCallback } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { Bot, GitFork, RefreshCw, Loader2, ScrollText, Maximize2 } from 'lucide-react'
+import { Bot, GitFork, RefreshCw, Loader2, ScrollText, Maximize2, Copy, Check, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store'
 import { Markdown } from '@/components/ui/Markdown'
+import { regenerateResponse } from '@/services/chat-service'
 
 export interface ResponseNodeData {
   content: string
@@ -18,12 +19,14 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
   const forkFromNode = useChatStore((s) => s.forkFromNode)
   const toggleNodeScrollable = useChatStore((s) => s.toggleNodeScrollable)
   const ensureArtifacts = useChatStore((s) => s.ensureArtifacts)
+  const deleteSubtree = useChatStore((s) => s.deleteSubtree)
   const nodeData = data as unknown as ResponseNodeData
   const content = nodeData.content || ''
   const nodeId = nodeData.nodeId || ''
   const model = nodeData.model
   const isStreaming = nodeData.isStreaming
   const scrollable = nodeData.scrollable
+  const [copied, setCopied] = useState(false)
 
   // Extract code blocks into artifacts once the response is complete.
   useEffect(() => {
@@ -39,6 +42,16 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight
     }
   }, [content, isStreaming, scrollable])
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      // Clipboard unavailable; ignore.
+    }
+  }, [content])
 
   return (
     <div className={cn(
@@ -91,6 +104,13 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
       {/* Action buttons */}
       <div className="absolute -top-2 -right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
+          onClick={handleCopy}
+          className="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
+          title={copied ? 'Copied!' : 'Copy response'}
+        >
+          {copied ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
+        </button>
+        <button
           onClick={() => toggleNodeScrollable(nodeId)}
           className={cn(
             'p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent',
@@ -108,10 +128,19 @@ function ResponseNodeComponent({ data, sourcePosition, targetPosition }: NodePro
           <GitFork className="w-3 h-3" />
         </button>
         <button
-          className="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent"
+          onClick={() => regenerateResponse(nodeId)}
+          disabled={isStreaming}
+          className="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
           title="Regenerate"
         >
-          <RefreshCw className="w-3 h-3" />
+          <RefreshCw className={cn('w-3 h-3', isStreaming && 'animate-spin')} />
+        </button>
+        <button
+          onClick={() => deleteSubtree(nodeId)}
+          className="p-1.5 rounded-md bg-card border border-border shadow-sm hover:bg-destructive/10 hover:text-destructive"
+          title="Delete"
+        >
+          <Trash2 className="w-3 h-3" />
         </button>
       </div>
 

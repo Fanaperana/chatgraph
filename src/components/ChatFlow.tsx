@@ -20,12 +20,14 @@ import { getLayoutedElements } from '@/utils/layout'
 import { PromptNode } from '@/components/nodes/PromptNode'
 import { ResponseNode } from '@/components/nodes/ResponseNode'
 import { InputNode } from '@/components/nodes/InputNode'
+import { ThinkingNode } from '@/components/nodes/ThinkingNode'
 import { Toolbar } from '@/components/Toolbar'
 
 const nodeTypes = {
   promptNode: PromptNode,
   responseNode: ResponseNode,
   inputNode: InputNode,
+  thinkingNode: ThinkingNode,
 }
 
 // Rough estimate of a response node's rendered height so Dagre can reserve
@@ -68,7 +70,16 @@ function ChatFlowInner() {
     const nodes: Node[] = []
     const edges: Edge[] = []
 
+    // The single assistant node currently generating a response (if any).
+    const streamingNode = Object.values(tree.nodes).find(
+      (n) => n.isStreaming && n.role === 'assistant'
+    )
+    // "Thinking" phase = streaming but no tokens yet. We hide the empty
+    // response node and show a thinking indicator in its place.
+    const thinkingPhase = !!streamingNode && streamingNode.content === ''
+
     Object.values(tree.nodes).forEach((chatNode) => {
+      if (thinkingPhase && streamingNode && chatNode.id === streamingNode.id) return
       const isUser = chatNode.role === 'user'
       nodes.push({
         id: chatNode.id,
@@ -141,6 +152,41 @@ function ChatFlowInner() {
       })
     })
 
+    // Reasoning / thinking nodes attach to the RIGHT of a node. While the
+    // model is thinking (no tokens yet) it hangs off the prompt; once tokens
+    // stream it hangs off the response. If the model exposed thinking steps we
+    // keep the node afterwards so the steps can be reviewed (collapsible).
+    Object.values(tree.nodes).forEach((a) => {
+      if (a.role !== 'assistant') return
+      const hasReasoning = !!a.reasoning && a.reasoning.trim() !== ''
+      if (!a.isStreaming && !hasReasoning) return
+
+      const isThinking = a.isStreaming && a.content === ''
+      const phase = isThinking ? 'thinking' : a.isStreaming ? 'responding' : 'done'
+      const anchorId = isThinking ? a.parentId : a.id
+      if (!anchorId || !tree.nodes[anchorId]) return
+
+      const reasoningId = `reasoning-${a.id}`
+      nodes.push({
+        id: reasoningId,
+        type: 'thinkingNode',
+        position: { x: 0, y: 0 },
+        data: { phase, reasoning: a.reasoning, streaming: !!a.isStreaming },
+      })
+      edges.push({
+        id: `${anchorId}-${reasoningId}`,
+        source: anchorId,
+        target: reasoningId,
+        type: 'smoothstep',
+        animated: !!a.isStreaming,
+        style: {
+          stroke: 'var(--color-primary)',
+          strokeWidth: 1,
+          strokeDasharray: a.isStreaming ? '4 4' : undefined,
+        },
+      })
+    })
+
     return { flowNodes: nodes, flowEdges: edges }
   }, [tree])
 
@@ -174,16 +220,26 @@ function ChatFlowInner() {
   const dataFingerprint = useMemo(
     () =>
       JSON.stringify(
-        flowNodes.map((n) => [n.id, n.data?.content, n.data?.isStreaming, n.data?.model, n.data?.scrollable])
+        flowNodes.map((n) => [
+          n.id,
+          n.data?.content,
+          n.data?.isStreaming,
+          n.data?.model,
+          n.data?.scrollable,
+          n.data?.reasoning,
+        ])
       ),
     [flowNodes]
   )
 
-  // Id of the node currently streaming a response (if any).
+  // Id of the node the viewport should follow while a response generates.
+  // While thinking (no tokens yet) the response node is hidden, so we follow
+  // the thinking indicator; once tokens arrive we follow the response node.
   const streamingNodeId = useMemo(() => {
     if (!tree) return null
     const streaming = Object.values(tree.nodes).find((n) => n.isStreaming)
-    return streaming ? streaming.id : null
+    if (!streaming) return null
+    return streaming.content === '' ? `reasoning-${streaming.id}` : streaming.id
   }, [tree])
 
   // Smoothly center the viewport on a single node.
@@ -351,9 +407,12 @@ function ChatFlowInner() {
         <Controls className="!bg-card !border-border !shadow-lg [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
         <MiniMap
           className="!bg-card !border-border !rounded-[3px]"
+          pannable
+          zoomable
           nodeColor={(node) => {
             if (node.type === 'promptNode') return 'var(--color-primary)'
             if (node.type === 'responseNode') return 'var(--color-muted-foreground)'
+            if (node.type === 'thinkingNode') return 'var(--color-primary)'
             return 'var(--color-border)'
           }}
         />

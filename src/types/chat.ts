@@ -16,6 +16,8 @@ export interface ChatNode {
   isStreaming?: boolean
   /** When true, the node body is capped and scrolls instead of growing. */
   scrollable?: boolean
+  /** The model's reasoning / thinking steps, when the model exposes them. */
+  reasoning?: string
   /** Artifacts extracted from this node's response (code blocks). */
   artifactIds?: string[]
 }

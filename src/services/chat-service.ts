@@ -59,10 +59,16 @@ export async function sendMessage(content: string, parentId: string | null): Pro
   try {
     const provider = getProvider(effectiveConfig.type)
     let fullContent = ''
+    let fullReasoning = ''
 
     for await (const chunk of provider.chat(messages, effectiveConfig)) {
-      fullContent += chunk
-      store.updateNodeContent(responseNodeId, fullContent)
+      if (typeof chunk === 'string') {
+        fullContent += chunk
+        store.updateNodeContent(responseNodeId, fullContent)
+      } else {
+        fullReasoning += chunk.reasoning
+        store.updateNodeReasoning(responseNodeId, fullReasoning)
+      }
     }
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
@@ -114,10 +120,16 @@ export async function regenerateResponse(responseNodeId: string): Promise<void> 
   try {
     const provider = getProvider(providerConfig.type)
     let fullContent = ''
+    let fullReasoning = ''
 
     for await (const chunk of provider.chat(messages, providerConfig)) {
-      fullContent += chunk
-      store.updateNodeContent(newResponseId, fullContent)
+      if (typeof chunk === 'string') {
+        fullContent += chunk
+        store.updateNodeContent(newResponseId, fullContent)
+      } else {
+        fullReasoning += chunk.reasoning
+        store.updateNodeReasoning(newResponseId, fullReasoning)
+      }
     }
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
